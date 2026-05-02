@@ -49,6 +49,31 @@ ClaudeFlow preserves 100% of Anthropic API capabilities while adding intelligent
 
 ### Installation
 
+#### Option 1: Using CLI Tool (Recommended)
+
+```bash
+# Install globally from npm (when published)
+npm install -g claudeflow
+
+# Or install from source
+git clone https://github.com/your-org/claudeflow.git
+cd claudeflow
+npm install
+npm run build
+npm link
+
+# Run interactive setup wizard
+claudeflow setup
+
+# Start daemon
+claudeflow daemon start
+
+# Check status
+claudeflow daemon status
+```
+
+#### Option 2: Manual Setup
+
 ```bash
 # Clone repository
 git clone https://github.com/your-org/claudeflow.git
@@ -103,6 +128,7 @@ All Anthropic features work natively:
 
 ## 📖 Documentation
 
+- **[CLI Tool Guide](docs/CLI.md)**: Complete CLI reference and usage examples
 - **[API Documentation](docs/API.md)**: Complete API reference with examples
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Production deployment instructions
 - **[Developer Guide](docs/DEVELOPER.md)**: Architecture and contribution guidelines
@@ -146,6 +172,36 @@ Request → Parse → Classify → Optimize → Route → Execute → Cache → 
 9. **Cache**: Store response for future deduplication
 
 ## 🔧 Configuration
+
+### CLI Tool (Recommended)
+
+The CLI tool provides an interactive way to manage configuration:
+
+```bash
+# Interactive setup wizard
+claudeflow setup
+
+# View current configuration
+claudeflow config show
+
+# Update specific settings
+claudeflow config set daemon.port 4000
+claudeflow config set daemon.logLevel debug
+
+# Manage accounts
+claudeflow account add
+claudeflow account list
+
+# Manage combos (load balancing)
+claudeflow combo create
+claudeflow combo list
+
+# Create profiles for different environments
+claudeflow profile create production
+claudeflow profile switch production
+```
+
+Configuration is stored in `~/.claudeflow/config.json`. See [CLI Documentation](docs/CLI.md) for complete reference.
 
 ### Environment Variables
 
@@ -266,6 +322,23 @@ We welcome contributions! Please see our [Developer Guide](docs/DEVELOPER.md) fo
 - **Multi-Account**: Manage multiple Anthropic accounts efficiently
 - **Free Access**: Use Kiro accounts for free Claude access
 - **Analytics**: Track costs and optimize usage patterns
+- **CLI Management**: Easy daemon and account management via CLI tool
+
+## 🛠️ CLI Tool Features
+
+The ClaudeFlow CLI provides comprehensive management capabilities:
+
+- **Daemon Management**: Start, stop, restart, and monitor the ClaudeFlow daemon
+- **Account Management**: Add, remove, and manage Kiro/Anthropic accounts
+- **Combo Management**: Create account pools for load balancing
+- **Health Monitoring**: Check infrastructure health and run E2E tests
+- **Analytics**: View detailed usage metrics and cost breakdowns
+- **Quota Tracking**: Monitor quota usage with visual progress bars
+- **Session Management**: Automatic session refresh for Kiro accounts
+- **Backup & Restore**: Backup and restore configuration and data
+- **Profile Management**: Switch between different environment profiles
+
+See [CLI Documentation](docs/CLI.md) for complete command reference.
 
 ## 🔄 Roadmap
 

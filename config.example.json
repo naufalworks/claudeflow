@@ -1,0 +1,74 @@
+{
+  "server": {
+    "port": 20129,
+    "host": "0.0.0.0",
+    "logLevel": "info"
+  },
+  "infrastructure": {
+    "qdrant": {
+      "url": "http://localhost:6333"
+    },
+    "redis": {
+      "url": "redis://localhost:6379"
+    },
+    "voyage": {
+      "apiKey": "your-voyage-api-key"
+    }
+  },
+  "accounts": [
+    {
+      "id": "anthropic-account-1",
+      "apiKey": "your-anthropic-api-key-1",
+      "provider": "anthropic"
+    },
+    {
+      "id": "anthropic-account-2",
+      "apiKey": "your-anthropic-api-key-2",
+      "provider": "anthropic"
+    },
+    {
+      "id": "kiro-account-1",
+      "apiKey": "your-kiro-api-key-1",
+      "provider": "kiro",
+      "kiroConfig": {
+        "machineId": "your-machine-id-1",
+        "mitmRouterUrl": "http://3.68.219.151:20128"
+      }
+    },
+    {
+      "id": "kiro-account-2",
+      "apiKey": "your-kiro-api-key-2",
+      "provider": "kiro",
+      "kiroConfig": {
+        "machineId": "your-machine-id-2",
+        "mitmRouterUrl": "http://3.68.219.151:20128",
+        "combo": {
+          "accounts": ["account-a", "account-b", "account-c"],
+          "strategy": "round-robin"
+        }
+      }
+    }
+  ],
+  "optimization": {
+    "semanticDeduplication": {
+      "enabled": true,
+      "similarityThreshold": 0.95,
+      "cacheTTL": 86400
+    },
+    "promptCaching": {
+      "enabled": true,
+      "minTokens": 1024
+    },
+    "thinkingBudget": {
+      "enabled": true,
+      "simple": 0,
+      "moderate": 2000,
+      "complex": 10000
+    },
+    "contextCompression": {
+      "enabled": true,
+      "minTokens": 8000,
+      "recentMessagesToKeep": 3
+    }
+  }
+}

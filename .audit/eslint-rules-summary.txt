@@ -1,0 +1,17 @@
+ 175 @typescript-eslint/no-unsafe-member-access
+  86 @typescript-eslint/no-unsafe-assignment
+  46 @typescript-eslint/no-explicit-any
+  36 @typescript-eslint/no-unsafe-call
+  28 @typescript-eslint/no-unsafe-argument
+  11 @typescript-eslint/require-await
+   4 @typescript-eslint/no-unsafe-return
+   3 @typescript-eslint/no-unnecessary-type-assertion
+   2 @typescript-eslint/restrict-template-expressions
+   2 @typescript-eslint/no-misused-promises
+   2 @typescript-eslint/no-floating-promises
+   2 @typescript-eslint/no-base-to-string
+   2 @typescript-eslint/await-thenable
+   1 @typescript-eslint/no-var-requires
+   1 @typescript-eslint/no-unused-vars
+   1 @typescript-eslint/no-redundant-type-constituents
+   1 @typescript-eslint/ban-ts-comment

@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-05-02T16:12:01.054Z",
+  "buildTime": "1.714s",
+  "nodeVersion": "v20.20.0",
+  "codebase": {
+    "totalFiles": 84,
+    "totalLines": 25946,
+    "gitCommit": "0ae2e7740afbd2b0c59d00efda72da5a864eb144",
+    "gitDate": "2026-05-02 21:18:55 +0700",
+    "gitMessage": "feat: implement comprehensive CLI tool for ClaudeFlow management"
+  },
+  "testResults": {
+    "totalTests": 205,
+    "passing": 205,
+    "failing": 0,
+    "testSuites": {
+      "total": 20,
+      "passing": 15,
+      "failing": 5
+    }
+  },
+  "environment": {
+    "platform": "darwin",
+    "shell": "bash"
+  }
+}

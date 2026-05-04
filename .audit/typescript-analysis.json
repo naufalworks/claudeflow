@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-05-02T16:16:12.374Z",
+  "typeScriptVersion": "5.4.5",
+  "analysis": {
+    "anyUsage": {
+      "total": 28,
+      "inSourceFiles": 28,
+      "inTestFiles": 0,
+      "locations": [
+        "src/cli/utils/logger.ts: 4 occurrences",
+        "src/server/routes.ts: 13 occurrences",
+        "src/cli/types/cli.types.ts: 1 occurrence",
+        "Other files: 10 occurrences"
+      ]
+    },
+    "typeAssertions": {
+      "total": 138,
+      "commonPatterns": [
+        "Result type casting in parsers",
+        "Record<string, unknown> casting",
+        "Error type casting in catch blocks"
+      ]
+    },
+    "missingReturnTypes": {
+      "total": 5,
+      "functions": [
+        "calculateBackoffDelay (src/server/routes.ts:63)",
+        "handleStreamingRequest (src/server/routes.ts:524)",
+        "fetchQuotaData (src/cli/commands/quota.ts:86)",
+        "main (src/scripts/verify-infrastructure.ts:167)",
+        "main (src/index.ts:7)"
+      ]
+    },
+    "compilerDiagnostics": {
+      "errors": 0,
+      "warnings": 0,
+      "info": 0
+    }
+  },
+  "score": {
+    "overall": 82,
+    "breakdown": {
+      "noCompilerErrors": 100,
+      "anyUsageScore": 89,
+      "typeAssertionScore": 75,
+      "returnTypeScore": 94
+    },
+    "calculation": "Base 100 - (any usage: 28 * 0.4 = 11.2) - (type assertions: 138 * 0.1 = 13.8) - (missing return types: 5 * 1.2 = 6) = 82"
+  },
+  "recommendations": [
+    "Replace 'any' types in error handlers with proper Error types",
+    "Add explicit return types to 5 functions",
+    "Review type assertions in parsers for potential type guards",
+    "Consider stricter TypeScript configuration (noImplicitAny)"
+  ]
+}

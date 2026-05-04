@@ -1,0 +1,121 @@
+{
+  "@anthropic-ai/sdk": {
+    "current": "0.20.9",
+    "wanted": "0.20.9",
+    "latest": "0.92.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@anthropic-ai/sdk"
+  },
+  "@fastify/cors": {
+    "current": "9.0.1",
+    "wanted": "9.0.1",
+    "latest": "11.2.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@fastify/cors"
+  },
+  "@types/jest": {
+    "current": "29.5.14",
+    "wanted": "29.5.14",
+    "latest": "30.0.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@types/jest"
+  },
+  "@types/node": {
+    "current": "20.19.39",
+    "wanted": "20.19.39",
+    "latest": "25.6.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@types/node"
+  },
+  "@typescript-eslint/eslint-plugin": {
+    "current": "7.18.0",
+    "wanted": "7.18.0",
+    "latest": "8.59.1",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@typescript-eslint/eslint-plugin"
+  },
+  "@typescript-eslint/parser": {
+    "current": "7.18.0",
+    "wanted": "7.18.0",
+    "latest": "8.59.1",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/@typescript-eslint/parser"
+  },
+  "axios": {
+    "current": "1.15.2",
+    "wanted": "1.16.0",
+    "latest": "1.16.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/axios"
+  },
+  "dotenv": {
+    "current": "16.6.1",
+    "wanted": "16.6.1",
+    "latest": "17.4.2",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/dotenv"
+  },
+  "eslint": {
+    "current": "8.57.1",
+    "wanted": "8.57.1",
+    "latest": "10.3.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/eslint"
+  },
+  "eslint-config-prettier": {
+    "current": "9.1.2",
+    "wanted": "9.1.2",
+    "latest": "10.1.8",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/eslint-config-prettier"
+  },
+  "fastify": {
+    "current": "4.29.1",
+    "wanted": "4.29.1",
+    "latest": "5.8.5",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/fastify"
+  },
+  "jest": {
+    "current": "29.7.0",
+    "wanted": "29.7.0",
+    "latest": "30.3.0",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/jest"
+  },
+  "pino": {
+    "current": "8.21.0",
+    "wanted": "8.21.0",
+    "latest": "10.3.1",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/pino"
+  },
+  "pino-pretty": {
+    "current": "11.3.0",
+    "wanted": "11.3.0",
+    "latest": "13.1.3",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/pino-pretty"
+  },
+  "pm2": {
+    "current": "7.0.0",
+    "wanted": "7.0.1",
+    "latest": "7.0.1",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/pm2"
+  },
+  "typescript": {
+    "current": "5.9.3",
+    "wanted": "5.9.3",
+    "latest": "6.0.3",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/typescript"
+  },
+  "zod": {
+    "current": "3.25.76",
+    "wanted": "3.25.76",
+    "latest": "4.4.2",
+    "dependent": "claudeflow",
+    "location": "/Users/azfar.naufal/Documents/router/claudeflow/node_modules/zod"
+  }
+}

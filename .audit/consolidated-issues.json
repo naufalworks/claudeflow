@@ -1,0 +1,1062 @@
+{
+  "metadata": {
+    "project": "ClaudeFlow",
+    "auditDate": "2026-05-03",
+    "version": "0.1.0",
+    "totalIssues": 45,
+    "categories": [
+      "Architecture & Design Patterns",
+      "Code Quality",
+      "ES Module Compliance",
+      "Error Handling",
+      "Testing",
+      "Security",
+      "Performance",
+      "Documentation",
+      "Configuration & Environment",
+      "Dependencies"
+    ],
+    "priorityCounts": {
+      "critical": 12,
+      "high": 23,
+      "medium": 10,
+      "low": 0
+    },
+    "breakingChanges": [
+      {
+        "issueId": "ARCH-001",
+        "reason": "Splitting routes.ts into multiple modules will change internal module structure and imports"
+      },
+      {
+        "issueId": "ARCH-002",
+        "reason": "Breaking circular dependency requires restructuring module initialization"
+      },
+      {
+        "issueId": "ARCH-003",
+        "reason": "Extracting CLI command registry may change command registration flow"
+      },
+      {
+        "issueId": "ARCH-004",
+        "reason": "Splitting request parser will change internal parser module structure"
+      },
+      {
+        "issueId": "ARCH-005",
+        "reason": "Splitting response parser will change internal parser module structure"
+      },
+      {
+        "issueId": "QUAL-001",
+        "reason": "Renaming 106 variables from snake_case to camelCase affects internal APIs"
+      },
+      {
+        "issueId": "SEC-002",
+        "reason": "Restricting CORS origins will break clients not in whitelist"
+      },
+      {
+        "issueId": "SEC-004",
+        "reason": "Enforcing HTTPS will break HTTP-only clients"
+      }
+    ],
+    "performanceImpact": [
+      {
+        "issueId": "PERF-001",
+        "currentImpact": "Memory leak potential for long responses (40KB+ for 10K tokens)",
+        "fixBenefit": "Prevents memory leaks, stable memory usage",
+        "estimatedImprovement": "Memory usage capped at sliding window size"
+      },
+      {
+        "issueId": "PERF-002",
+        "currentImpact": "110-220ms unnecessary latency per request",
+        "fixBenefit": "26-30% latency reduction",
+        "estimatedImprovement": "110-220ms saved per request"
+      },
+      {
+        "issueId": "PERF-003",
+        "currentImpact": "TCP connection overhead on every request",
+        "fixBenefit": "Reuse connections, reduce connection overhead",
+        "estimatedImprovement": "20-50ms saved per request"
+      },
+      {
+        "issueId": "PERF-004",
+        "currentImpact": "200ms blocking per cache check",
+        "fixBenefit": "Async batching reduces blocking time",
+        "estimatedImprovement": "50-100ms saved per request with batching"
+      },
+      {
+        "issueId": "PERF-005",
+        "currentImpact": "Cascading failures when dependencies slow/down",
+        "fixBenefit": "Fast failure, prevents cascade",
+        "estimatedImprovement": "Fail fast in 1-2s instead of 30s+ timeout"
+      },
+      {
+        "issueId": "PERF-006",
+        "currentImpact": "Suboptimal cache hit rates with fixed thresholds",
+        "fixBenefit": "Adaptive thresholds improve cache efficiency",
+        "estimatedImprovement": "5-10% cache hit rate improvement"
+      },
+      {
+        "issueId": "PERF-007",
+        "currentImpact": "Thundering herd on retries",
+        "fixBenefit": "Distributed retry load",
+        "estimatedImprovement": "Smoother load distribution during failures"
+      },
+      {
+        "issueId": "PERF-008",
+        "currentImpact": "Slow analytics queries with N+1 pattern",
+        "fixBenefit": "Batch Redis operations",
+        "estimatedImprovement": "50-80% faster analytics queries"
+      }
+    ],
+    "securityImpact": [
+      {
+        "issueId": "SEC-001",
+        "severity": "critical",
+        "threat": "Denial of Service (DoS), API quota abuse, financial loss",
+        "exploitability": "High - trivial to exploit, no authentication required",
+        "dataAtRisk": "Service availability, API quota, financial resources",
+        "complianceImpact": "Violates security best practices, potential SLA violations"
+      },
+      {
+        "issueId": "SEC-002",
+        "severity": "critical",
+        "threat": "Session hijacking, CSRF attacks, data exfiltration",
+        "exploitability": "High - any origin can make authenticated requests",
+        "dataAtRisk": "User sessions, authentication tokens, sensitive data",
+        "complianceImpact": "Violates OWASP security guidelines, potential GDPR violations"
+      },
+      {
+        "issueId": "SEC-003",
+        "severity": "critical",
+        "threat": "Information disclosure, privacy violation, competitive intelligence leak",
+        "exploitability": "High - no authentication required",
+        "dataAtRisk": "Analytics data, metrics, usage patterns, business intelligence",
+        "complianceImpact": "Privacy violations, potential regulatory issues"
+      },
+      {
+        "issueId": "SEC-004",
+        "severity": "high",
+        "threat": "Man-in-the-middle attacks, credential theft, session hijacking",
+        "exploitability": "Medium - requires network access",
+        "dataAtRisk": "API keys, session tokens, all transmitted data",
+        "complianceImpact": "Violates PCI-DSS, HIPAA, and other compliance requirements"
+      },
+      {
+        "issueId": "SEC-005",
+        "severity": "high",
+        "threat": "Account compromise, unauthorized API access, session theft",
+        "exploitability": "Medium - requires Redis access",
+        "dataAtRisk": "All session tokens, API keys, user credentials",
+        "complianceImpact": "Violates data protection requirements, encryption at rest"
+      },
+      {
+        "issueId": "SEC-006",
+        "severity": "high",
+        "threat": "Secret exposure, credential theft from logs",
+        "exploitability": "Medium - requires log access",
+        "dataAtRisk": "API keys, session tokens, authentication credentials",
+        "complianceImpact": "Violates secret management best practices"
+      },
+      {
+        "issueId": "SEC-007",
+        "severity": "high",
+        "threat": "Input validation bypass, potential injection attacks",
+        "exploitability": "Medium - requires crafted requests",
+        "dataAtRisk": "Application integrity, query results",
+        "complianceImpact": "Violates OWASP input validation guidelines"
+      },
+      {
+        "issueId": "SEC-008",
+        "severity": "high",
+        "threat": "Unauthorized Redis access, session theft, data manipulation",
+        "exploitability": "Medium - requires network access to Redis",
+        "dataAtRisk": "All Redis data including sessions, cache, analytics",
+        "complianceImpact": "Violates database security best practices"
+      }
+    ],
+    "quickWins": [
+      {
+        "issueId": "ARCH-002",
+        "priority": "critical",
+        "title": "Circular Dependency: server/index.ts ↔ server/routes.ts",
+        "effort": "low",
+        "benefit": "Fixes initialization issues, improves testability"
+      },
+      {
+        "issueId": "ERR-001",
+        "priority": "critical",
+        "title": "Infrastructure Initialization - No Error Handling",
+        "effort": "low",
+        "benefit": "Clear error messages on startup failure"
+      },
+      {
+        "issueId": "ERR-002",
+        "priority": "critical",
+        "title": "Health Check - No Error Handling",
+        "effort": "low",
+        "benefit": "Partial health status instead of complete failure"
+      },
+      {
+        "issueId": "SEC-002",
+        "priority": "critical",
+        "title": "Permissive CORS Configuration",
+        "effort": "low",
+        "benefit": "Prevents session hijacking and CSRF attacks"
+      },
+      {
+        "issueId": "SEC-003",
+        "priority": "critical",
+        "title": "No Authentication on Admin Endpoints",
+        "effort": "low",
+        "benefit": "Protects sensitive analytics and metrics data"
+      },
+      {
+        "issueId": "SEC-004",
+        "priority": "high",
+        "title": "No HTTPS Enforcement",
+        "effort": "low",
+        "benefit": "Prevents MITM attacks and credential theft"
+      },
+      {
+        "issueId": "SEC-006",
+        "priority": "high",
+        "title": "Sensitive Headers Logged",
+        "effort": "low",
+        "benefit": "Prevents secret exposure in logs"
+      },
+      {
+        "issueId": "SEC-007",
+        "priority": "high",
+        "title": "Weak Query Parameter Validation",
+        "effort": "low",
+        "benefit": "Prevents injection attacks and filter bypass"
+      },
+      {
+        "issueId": "SEC-008",
+        "priority": "high",
+        "title": "No Redis Authentication Enforcement",
+        "effort": "low",
+        "benefit": "Prevents unauthorized Redis access"
+      },
+      {
+        "issueId": "PERF-002",
+        "priority": "high",
+        "title": "Missing Parallelization in Request Pipeline",
+        "effort": "low",
+        "benefit": "110-220ms latency reduction (26-30%)"
+      },
+      {
+        "issueId": "QUAL-003",
+        "priority": "high",
+        "title": "Magic Strings (28 instances)",
+        "effort": "low",
+        "benefit": "Improves type safety and prevents typos"
+      },
+      {
+        "issueId": "TEST-005",
+        "priority": "high",
+        "title": "Config Module Low Coverage (55%)",
+        "effort": "low",
+        "benefit": "Catches configuration errors early"
+      },
+      {
+        "issueId": "DOC-004",
+        "priority": "high",
+        "title": "Missing Security Best Practices",
+        "effort": "low",
+        "benefit": "Helps users deploy securely"
+      }
+    ],
+    "complexIssues": [
+      {
+        "issueId": "ARCH-001",
+        "priority": "critical",
+        "title": "God Object: server/routes.ts (1109 lines)",
+        "effort": "high",
+        "complexity": "Requires splitting into 5 modules, updating imports across codebase, refactoring tests",
+        "estimatedTime": "2-3 days"
+      },
+      {
+        "issueId": "TEST-001",
+        "priority": "critical",
+        "title": "CLI Module Completely Untested (0% coverage)",
+        "effort": "high",
+        "complexity": "Requires writing tests for 14 commands, 26+ files, mocking CLI interactions",
+        "estimatedTime": "3-4 days"
+      },
+      {
+        "issueId": "TEST-002",
+        "priority": "critical",
+        "title": "Overall Coverage Critically Low (25.42%)",
+        "effort": "high",
+        "complexity": "Requires increasing coverage from 25% to 80% across entire codebase",
+        "estimatedTime": "5-7 days"
+      },
+      {
+        "issueId": "TEST-003",
+        "priority": "critical",
+        "title": "No Integration Tests",
+        "effort": "high",
+        "complexity": "Requires setting up integration test infrastructure, writing end-to-end tests",
+        "estimatedTime": "2-3 days"
+      },
+      {
+        "issueId": "PERF-004",
+        "priority": "high",
+        "title": "Synchronous Embedding Generation",
+        "effort": "high",
+        "complexity": "Requires implementing async queue, batching logic, connection pooling",
+        "estimatedTime": "2-3 days"
+      },
+      {
+        "issueId": "ERR-007",
+        "priority": "medium",
+        "title": "Missing Custom Error Types",
+        "effort": "high",
+        "complexity": "Requires creating 20+ custom error types, updating error handling across codebase",
+        "estimatedTime": "2-3 days"
+      }
+    ],
+    "issueDependencies": [
+      {
+        "issueId": "ARCH-002",
+        "dependsOn": ["ARCH-001"],
+        "reason": "Circular dependency fix is easier after routes.ts is split"
+      },
+      {
+        "issueId": "TEST-002",
+        "dependsOn": ["TEST-001", "TEST-003", "TEST-004", "TEST-005"],
+        "reason": "Overall coverage depends on completing individual module tests"
+      },
+      {
+        "issueId": "ERR-005",
+        "dependsOn": ["ERR-007"],
+        "reason": "Structured logging should use custom error types for better categorization"
+      },
+      {
+        "issueId": "ERR-007",
+        "dependsOn": ["ARCH-001"],
+        "reason": "Error types easier to implement after routes.ts refactoring"
+      },
+      {
+        "issueId": "PERF-002",
+        "dependsOn": ["ARCH-001"],
+        "reason": "Parallelization easier after routes.ts is split into focused modules"
+      },
+      {
+        "issueId": "PERF-005",
+        "dependsOn": ["PERF-003"],
+        "reason": "Circuit breaker should be implemented with connection pooling"
+      },
+      {
+        "issueId": "SEC-005",
+        "dependsOn": ["SEC-008"],
+        "reason": "Redis encryption should be implemented after Redis auth is enforced"
+      },
+      {
+        "issueId": "TEST-003",
+        "dependsOn": ["SEC-001", "SEC-002", "SEC-003"],
+        "reason": "Integration tests should test secured endpoints"
+      },
+      {
+        "issueId": "DOC-002",
+        "dependsOn": ["ERR-007"],
+        "reason": "Troubleshooting guide should document custom error types"
+      },
+      {
+        "issueId": "DOC-003",
+        "dependsOn": ["PERF-002", "PERF-003", "PERF-004", "PERF-005", "PERF-006"],
+        "reason": "Performance tuning guide should document implemented optimizations"
+      },
+      {
+        "issueId": "DOC-004",
+        "dependsOn": ["SEC-001", "SEC-002", "SEC-003", "SEC-004", "SEC-005", "SEC-006", "SEC-007", "SEC-008"],
+        "reason": "Security best practices guide should document implemented security measures"
+      }
+    ],
+    "issueGroups": [
+      {
+        "groupId": "GROUP-001",
+        "name": "God Objects Refactoring",
+        "description": "Large files with multiple responsibilities that need to be split",
+        "issues": ["ARCH-001", "ARCH-003", "ARCH-004", "ARCH-005"],
+        "priority": "critical",
+        "effort": "high"
+      },
+      {
+        "groupId": "GROUP-002",
+        "name": "Security Hardening",
+        "description": "Critical security vulnerabilities that need immediate attention",
+        "issues": ["SEC-001", "SEC-002", "SEC-003", "SEC-004", "SEC-005", "SEC-006", "SEC-007", "SEC-008"],
+        "priority": "critical",
+        "effort": "medium"
+      },
+      {
+        "groupId": "GROUP-003",
+        "name": "Error Handling Infrastructure",
+        "description": "Missing error handling and logging improvements",
+        "issues": ["ERR-001", "ERR-002", "ERR-003", "ERR-004", "ERR-005", "ERR-006", "ERR-007"],
+        "priority": "critical",
+        "effort": "high"
+      },
+      {
+        "groupId": "GROUP-004",
+        "name": "Test Coverage Improvement",
+        "description": "Increase test coverage across all modules",
+        "issues": ["TEST-001", "TEST-002", "TEST-003", "TEST-004", "TEST-005"],
+        "priority": "critical",
+        "effort": "high"
+      },
+      {
+        "groupId": "GROUP-005",
+        "name": "Performance Optimization",
+        "description": "Performance improvements for latency and resource usage",
+        "issues": ["PERF-001", "PERF-002", "PERF-003", "PERF-004", "PERF-005", "PERF-006", "PERF-007", "PERF-008"],
+        "priority": "critical",
+        "effort": "high"
+      },
+      {
+        "groupId": "GROUP-006",
+        "name": "Code Quality Cleanup",
+        "description": "Code quality improvements for maintainability",
+        "issues": ["QUAL-001", "QUAL-002", "QUAL-003", "QUAL-004", "QUAL-005"],
+        "priority": "high",
+        "effort": "medium"
+      },
+      {
+        "groupId": "GROUP-007",
+        "name": "Documentation Enhancement",
+        "description": "Missing documentation that needs to be created",
+        "issues": ["DOC-001", "DOC-002", "DOC-003", "DOC-004"],
+        "priority": "high",
+        "effort": "medium"
+      },
+      {
+        "groupId": "GROUP-008",
+        "name": "Configuration Management",
+        "description": "Configuration and environment setup improvements",
+        "issues": ["CONF-001", "CONF-002", "CONF-003"],
+        "priority": "medium",
+        "effort": "low"
+      },
+      {
+        "groupId": "GROUP-009",
+        "name": "Server Routes Refactoring",
+        "description": "Issues specifically related to server/routes.ts refactoring",
+        "issues": ["ARCH-001", "ARCH-002", "QUAL-002", "SEC-007", "PERF-002", "PERF-007", "PERF-008"],
+        "priority": "critical",
+        "effort": "high"
+      },
+      {
+        "groupId": "GROUP-010",
+        "name": "Redis Security & Performance",
+        "description": "Redis-related security and performance issues",
+        "issues": ["SEC-005", "SEC-008", "ERR-004", "PERF-008"],
+        "priority": "high",
+        "effort": "medium"
+      },
+      {
+        "groupId": "GROUP-011",
+        "name": "Streaming & Memory Management",
+        "description": "Streaming handler and memory management issues",
+        "issues": ["ERR-003", "PERF-001", "CONF-003"],
+        "priority": "critical",
+        "effort": "medium"
+      },
+      {
+        "groupId": "GROUP-012",
+        "name": "Infrastructure Reliability",
+        "description": "Infrastructure connection and error handling",
+        "issues": ["ERR-001", "ERR-002", "ERR-006", "TEST-004", "PERF-005"],
+        "priority": "critical",
+        "effort": "medium"
+      }
+    ]
+  },
+  "issues": [
+    {
+      "id": "ARCH-001",
+      "category": "Architecture & Design Patterns",
+      "priority": "critical",
+      "title": "God Object: server/routes.ts (1109 lines)",
+      "description": "The routes.ts file is a God Object with 1109 lines, 70 functions, max complexity 43, and 16 dependencies. It handles messages, streaming, analytics, health checks, metrics, error handling, request validation, and response formatting.",
+      "location": "src/server/routes.ts",
+      "impact": "High - Difficult to test, hard to maintain, high risk of bugs, violates Single Responsibility Principle",
+      "recommendation": "Split into 5 route modules: messages.ts, streaming.ts, analytics.ts, health.ts, and middleware.ts",
+      "effort": "high",
+      "tags": ["architecture", "god-object", "refactoring"],
+      "relatedIssues": ["ARCH-002", "TEST-002", "QUAL-002", "SEC-007", "PERF-002"]
+    },
+    {
+      "id": "ARCH-002",
+      "category": "Architecture & Design Patterns",
+      "priority": "critical",
+      "title": "Circular Dependency: server/index.ts ↔ server/routes.ts",
+      "description": "Circular dependency between server initialization and routes modules causes initialization issues and tight coupling.",
+      "location": "src/server/index.ts, src/server/routes.ts",
+      "impact": "High - Initialization issues, tight coupling, difficult to test",
+      "recommendation": "Extract shared types, break the cycle by using dependency injection",
+      "effort": "low",
+      "tags": ["architecture", "circular-dependency"],
+      "relatedIssues": ["ARCH-001", "TEST-002"]
+    },
+    {
+      "id": "ARCH-003",
+      "category": "Architecture & Design Patterns",
+      "priority": "high",
+      "title": "God Object: cli/bin/claudeflow.ts (739 lines, complexity 94)",
+      "description": "CLI entry point has 739 lines with complexity 94 in setupCommands function. Handles CLI initialization, command registration (14 commands), argument parsing, help text generation, and error handling.",
+      "location": "src/cli/bin/claudeflow.ts",
+      "impact": "Medium - Difficult to test individual commands, hard to add new commands",
+      "recommendation": "Extract command registration to separate module (command-registry.ts)",
+      "effort": "medium",
+      "tags": ["architecture", "god-object", "cli"],
+      "relatedIssues": ["TEST-001", "QUAL-005"]
+    },
+    {
+      "id": "ARCH-004",
+      "category": "Architecture & Design Patterns",
+      "priority": "medium",
+      "title": "God Object: parsers/request-parser.ts (893 lines, complexity 38)",
+      "description": "Request parser is too large with multiple responsibilities: request validation, message parsing, content parsing, tool parsing, and system message parsing.",
+      "location": "src/parsers/request-parser.ts",
+      "impact": "Medium - Complex parsing logic, difficult to test edge cases, hard to extend",
+      "recommendation": "Split into focused parsers: message-parser.ts, content-parser.ts, tool-parser.ts, validator.ts",
+      "effort": "medium",
+      "tags": ["architecture", "god-object", "parsers"],
+      "relatedIssues": ["ARCH-005", "QUAL-001", "SEC-007"]
+    },
+    {
+      "id": "ARCH-005",
+      "category": "Architecture & Design Patterns",
+      "priority": "medium",
+      "title": "God Object: parsers/response-parser.ts (904 lines, complexity 24)",
+      "description": "Response parser handles response parsing, stream parsing, chunk parsing, usage parsing, and error parsing in one large file.",
+      "location": "src/parsers/response-parser.ts",
+      "impact": "Medium - Similar issues to request-parser.ts",
+      "recommendation": "Split into focused parsers: stream-parser.ts, chunk-parser.ts, usage-parser.ts, error-parser.ts",
+      "effort": "medium",
+      "tags": ["architecture", "god-object", "parsers"],
+      "relatedIssues": ["ARCH-004", "ERR-003"]
+    },
+
+    {
+      "id": "QUAL-001",
+      "category": "Code Quality",
+      "priority": "high",
+      "title": "Inconsistent Naming Conventions (106 instances)",
+      "description": "Mixing camelCase and snake_case throughout codebase. Found 106 instances of snake_case variables (max_tokens, stop_sequences, tool_choice, cache_control) mixed with camelCase.",
+      "location": "Multiple files, especially src/parsers/request-parser.ts",
+      "impact": "Medium - Reduces code readability and consistency",
+      "recommendation": "Use camelCase for all internal variables, only use snake_case when directly interfacing with external APIs",
+      "effort": "medium",
+      "tags": ["code-quality", "naming", "consistency"],
+      "relatedIssues": ["ARCH-004", "QUAL-003"]
+    },
+    {
+      "id": "QUAL-002",
+      "category": "Code Quality",
+      "priority": "high",
+      "title": "Magic Numbers (47 instances)",
+      "description": "47 magic numbers found throughout codebase including retry configuration (3, 1000, 10000, 2), quota thresholds (0.9, 0.8, 0.1, 0.5), and performance weights (0.2).",
+      "location": "src/server/routes.ts, src/accounts/account-pool-manager.ts",
+      "impact": "Medium - Difficult to understand intent, hard to maintain",
+      "recommendation": "Extract all magic numbers to named constants with explanatory comments",
+      "effort": "medium",
+      "tags": ["code-quality", "magic-numbers", "maintainability"],
+      "relatedIssues": ["QUAL-003", "PERF-007", "PERF-006"]
+    },
+    {
+      "id": "QUAL-003",
+      "category": "Code Quality",
+      "priority": "high",
+      "title": "Magic Strings (28 instances)",
+      "description": "28 magic strings found including role names ('user', 'assistant'), provider names ('kiro', 'anthropic'), and cache control types ('ephemeral').",
+      "location": "Multiple files",
+      "impact": "Medium - Type safety issues, potential typos",
+      "recommendation": "Use enums or constants for all magic strings",
+      "effort": "low",
+      "tags": ["code-quality", "magic-strings", "type-safety"],
+      "relatedIssues": ["QUAL-001", "QUAL-002"]
+    },
+    {
+      "id": "QUAL-004",
+      "category": "Code Quality",
+      "priority": "medium",
+      "title": "Unnecessary Comments (89 instances)",
+      "description": "89 instances of comments that explain WHAT the code does rather than WHY, adding no value.",
+      "location": "Multiple files",
+      "impact": "Low - Code clutter, maintenance overhead",
+      "recommendation": "Remove obvious comments, keep only WHY comments",
+      "effort": "low",
+      "tags": ["code-quality", "comments", "documentation"],
+      "relatedIssues": ["DOC-001"]
+    },
+    {
+      "id": "QUAL-005",
+      "category": "Code Quality",
+      "priority": "medium",
+      "title": "Long Parameter Lists (8 functions)",
+      "description": "8 functions with more than 5 parameters, making them difficult to use and maintain.",
+      "location": "src/cli/commands/setup.ts, health service",
+      "impact": "Low - Difficult to use, error-prone",
+      "recommendation": "Use configuration objects instead of long parameter lists",
+      "effort": "low",
+      "tags": ["code-quality", "function-design"],
+      "relatedIssues": ["ARCH-003"]
+    },
+    {
+      "id": "ERR-001",
+      "category": "Error Handling",
+      "priority": "critical",
+      "title": "Infrastructure Initialization - No Error Handling",
+      "description": "initializeInfrastructure() has no try-catch around Promise.all([qdrant.connect(), redis.connect()]). Unclear error messages on startup failure.",
+      "location": "src/infrastructure/index.ts",
+      "impact": "High - Unclear error messages on startup failure",
+      "recommendation": "Add try-catch with detailed error messages for each service",
+      "effort": "low",
+      "tags": ["error-handling", "infrastructure"],
+      "relatedIssues": ["ERR-002", "ERR-006", "TEST-004"]
+    },
+    {
+      "id": "ERR-002",
+      "category": "Error Handling",
+      "priority": "critical",
+      "title": "Health Check - No Error Handling",
+      "description": "healthCheckAll() throws on any health check failure instead of returning partial status.",
+      "location": "src/infrastructure/index.ts",
+      "impact": "High - Health endpoint fails completely instead of showing which services are down",
+      "recommendation": "Use Promise.allSettled() and return partial status",
+      "effort": "low",
+      "tags": ["error-handling", "health-check"],
+      "relatedIssues": ["ERR-001", "TEST-004"]
+    },
+    {
+      "id": "ERR-003",
+      "category": "Error Handling",
+      "priority": "critical",
+      "title": "Streaming Handler - No Error Handling",
+      "description": "handleStream() generator function has no try-catch around event processing. Stream interruption without cleanup causes potential memory leaks.",
+      "location": "src/streaming/streaming-handler.ts",
+      "impact": "High - Stream interruption without cleanup, potential memory leaks",
+      "recommendation": "Add try-catch around event processing with proper cleanup",
+      "effort": "medium",
+      "tags": ["error-handling", "streaming", "memory"],
+      "relatedIssues": ["PERF-001", "ARCH-005"]
+    },
+    {
+      "id": "ERR-004",
+      "category": "Error Handling",
+      "priority": "high",
+      "title": "Kiro Auth - Missing Try-Catch",
+      "description": "Multiple async Redis operations in kiro-auth-manager.ts without error handling: selectAccountFromCombo(), rotateAccount(), initializeCombosFromRedis().",
+      "location": "src/accounts/kiro-auth-manager.ts",
+      "impact": "Medium - Errors propagate without context, difficult to debug",
+      "recommendation": "Add try-catch to all async Redis operations",
+      "effort": "medium",
+      "tags": ["error-handling", "authentication"],
+      "relatedIssues": ["ERR-005", "SEC-005", "SEC-008"]
+    },
+    {
+      "id": "ERR-005",
+      "category": "Error Handling",
+      "priority": "high",
+      "title": "Inconsistent Logging",
+      "description": "Mix of console.log/error and structured logging across infrastructure, streaming, and auth modules.",
+      "location": "src/infrastructure/index.ts, src/streaming/streaming-handler.ts, src/accounts/kiro-auth-manager.ts",
+      "impact": "Medium - Difficult to debug, inconsistent log format, can't aggregate logs",
+      "recommendation": "Replace all console.log/error with structured logger",
+      "effort": "medium",
+      "tags": ["error-handling", "logging"],
+      "relatedIssues": ["ERR-004", "SEC-006", "DOC-002"]
+    },
+    {
+      "id": "ERR-006",
+      "category": "Error Handling",
+      "priority": "high",
+      "title": "Missing Retry Logic for Infrastructure",
+      "description": "No retry logic for transient failures in infrastructure connections (Qdrant, Redis, Voyage API).",
+      "location": "src/infrastructure/",
+      "impact": "Medium - Startup failures on temporary network issues",
+      "recommendation": "Add retry logic with exponential backoff for infrastructure connections",
+      "effort": "medium",
+      "tags": ["error-handling", "infrastructure", "reliability"],
+      "relatedIssues": ["ERR-001", "PERF-005", "PERF-007"]
+    },
+    {
+      "id": "ERR-007",
+      "category": "Error Handling",
+      "priority": "medium",
+      "title": "Missing Custom Error Types",
+      "description": "Only 1 custom error type (KiroMitmError) exists. Need 20+ custom error types for proper error discrimination (AccountError, ConfigurationError, InfrastructureError, StreamingError, ParsingError).",
+      "location": "Multiple files",
+      "impact": "Low - Generic error handling, unclear error sources, difficult to handle programmatically",
+      "recommendation": "Create error hierarchy with 20+ custom error types",
+      "effort": "high",
+      "tags": ["error-handling", "error-types"],
+      "relatedIssues": ["ERR-005", "DOC-002"]
+    },
+    {
+      "id": "TEST-001",
+      "category": "Testing",
+      "priority": "critical",
+      "title": "CLI Module Completely Untested (0% coverage)",
+      "description": "Entire CLI module has 0% test coverage. 14 commands (16 command files + 5 service files + 5 utility files = 26+ files) are completely untested.",
+      "location": "src/cli/",
+      "impact": "Critical - Major user-facing component is untested",
+      "recommendation": "Add comprehensive CLI tests for all 14 commands",
+      "effort": "high",
+      "tags": ["testing", "coverage", "cli"],
+      "relatedIssues": ["TEST-002", "ARCH-003"]
+    },
+    {
+      "id": "TEST-002",
+      "category": "Testing",
+      "priority": "critical",
+      "title": "Overall Coverage Critically Low (25.42%)",
+      "description": "Overall test coverage is only 25.42% (line coverage), with branch coverage at 18.30% and function coverage at 22.15%.",
+      "location": "Entire codebase",
+      "impact": "Critical - Insufficient test coverage for production",
+      "recommendation": "Increase coverage to 80% target",
+      "effort": "high",
+      "tags": ["testing", "coverage"],
+      "relatedIssues": ["TEST-001", "TEST-003", "TEST-004", "TEST-005", "ARCH-001"]
+    },
+    {
+      "id": "TEST-003",
+      "category": "Testing",
+      "priority": "critical",
+      "title": "No Integration Tests",
+      "description": "No end-to-end or integration tests for critical flows: full request flow, Kiro authentication flow, session refresh flow, cache hit/miss scenarios, error recovery scenarios.",
+      "location": "tests/",
+      "impact": "Critical - No integration testing",
+      "recommendation": "Add integration tests for critical paths",
+      "effort": "high",
+      "tags": ["testing", "integration"],
+      "relatedIssues": ["TEST-002", "ERR-004", "SEC-003"]
+    },
+    {
+      "id": "TEST-004",
+      "category": "Testing",
+      "priority": "high",
+      "title": "Infrastructure Module Low Coverage (38%)",
+      "description": "Infrastructure module has only 38% coverage. Missing tests for connection initialization, error handling for connection failures, retry logic, and connection pooling.",
+      "location": "src/infrastructure/",
+      "impact": "High - Core infrastructure untested",
+      "recommendation": "Add infrastructure tests",
+      "effort": "medium",
+      "tags": ["testing", "infrastructure"],
+      "relatedIssues": ["TEST-002", "ERR-001", "ERR-002"]
+    },
+    {
+      "id": "TEST-005",
+      "category": "Testing",
+      "priority": "high",
+      "title": "Config Module Low Coverage (55%)",
+      "description": "Configuration module has only 55% coverage. Missing tests for configuration validation, environment variable parsing, hot reload functionality, and default value handling.",
+      "location": "src/config/",
+      "impact": "Medium - Configuration errors not caught",
+      "recommendation": "Add config tests",
+      "effort": "low",
+      "tags": ["testing", "configuration"],
+      "relatedIssues": ["TEST-002", "CONF-002", "CONF-003"]
+    },
+    {
+      "id": "SEC-001",
+      "category": "Security",
+      "priority": "critical",
+      "title": "No Rate Limiting on Any Endpoint",
+      "description": "No rate limiting implemented on any endpoint. Vulnerable to DoS attacks, resource exhaustion, and cost explosion. All endpoints (API, admin, health) are unprotected.",
+      "location": "src/server/index.ts",
+      "impact": "Critical - Service unavailability, API quota abuse, financial loss",
+      "recommendation": "Implement multi-tier rate limiting: global (1000/min), API endpoints (60/min), admin endpoints (10/min)",
+      "effort": "medium",
+      "tags": ["security", "rate-limiting", "dos"],
+      "relatedIssues": ["SEC-003", "PERF-005"]
+    },
+    {
+      "id": "SEC-002",
+      "category": "Security",
+      "priority": "critical",
+      "title": "Permissive CORS Configuration",
+      "description": "CORS configured with origin: true and credentials: true, allowing ANY origin to make authenticated requests. Enables session hijacking, CSRF, and data exfiltration.",
+      "location": "src/server/index.ts",
+      "impact": "Critical - Session hijacking, CSRF, data exfiltration",
+      "recommendation": "Whitelist specific origins, restrict methods and headers",
+      "effort": "low",
+      "tags": ["security", "cors", "csrf"],
+      "relatedIssues": ["SEC-003", "SEC-004"]
+    },
+    {
+      "id": "SEC-003",
+      "category": "Security",
+      "priority": "critical",
+      "title": "No Authentication on Admin Endpoints",
+      "description": "Admin endpoints /admin/analytics and /metrics have no authentication. Anyone can access sensitive analytics and metrics data.",
+      "location": "src/server/index.ts",
+      "impact": "Critical - Information disclosure, privacy violation, competitive intelligence leak",
+      "recommendation": "Add API key authentication for admin endpoints",
+      "effort": "low",
+      "tags": ["security", "authentication", "admin"],
+      "relatedIssues": ["SEC-001", "SEC-002", "TEST-003"]
+    },
+    {
+      "id": "SEC-004",
+      "category": "Security",
+      "priority": "high",
+      "title": "No HTTPS Enforcement",
+      "description": "Server accepts HTTP connections without enforcing HTTPS. Session tokens and API keys transmitted in plaintext over HTTP.",
+      "location": "src/server/index.ts",
+      "impact": "High - Man-in-the-middle attacks, credential theft",
+      "recommendation": "Enforce HTTPS in production, add HSTS headers, redirect HTTP to HTTPS",
+      "effort": "low",
+      "tags": ["security", "https", "encryption"],
+      "relatedIssues": ["SEC-002", "SEC-005", "SEC-006"]
+    },
+    {
+      "id": "SEC-005",
+      "category": "Security",
+      "priority": "high",
+      "title": "Plaintext Session Storage in Redis",
+      "description": "Session tokens and API keys stored as plaintext JSON in Redis. If Redis is compromised, all sessions and API keys are exposed.",
+      "location": "src/accounts/kiro-auth-manager.ts",
+      "impact": "High - Account compromise, unauthorized API access",
+      "recommendation": "Encrypt session data before storing in Redis using AES-256-GCM",
+      "effort": "medium",
+      "tags": ["security", "encryption", "redis"],
+      "relatedIssues": ["SEC-004", "SEC-008", "ERR-004"]
+    },
+    {
+      "id": "SEC-006",
+      "category": "Security",
+      "priority": "high",
+      "title": "Sensitive Headers Logged",
+      "description": "Request headers including x-api-key and x-session-token are logged in plaintext. Secrets exposed in log files.",
+      "location": "src/server/index.ts",
+      "impact": "High - Secrets exposed in log files",
+      "recommendation": "Sanitize sensitive headers before logging",
+      "effort": "low",
+      "tags": ["security", "logging", "secrets"],
+      "relatedIssues": ["SEC-004", "ERR-005"]
+    },
+    {
+      "id": "SEC-007",
+      "category": "Security",
+      "priority": "high",
+      "title": "Weak Query Parameter Validation",
+      "description": "Analytics endpoint has weak query parameter validation. No type validation, no sanitization, invalid date handling not caught, no enum validation.",
+      "location": "src/server/routes.ts",
+      "impact": "Medium - Application errors, filter bypass, potential injection",
+      "recommendation": "Add comprehensive query parameter validation",
+      "effort": "low",
+      "tags": ["security", "validation", "input"],
+      "relatedIssues": ["ARCH-001", "ARCH-004"]
+    },
+    {
+      "id": "SEC-008",
+      "category": "Security",
+      "priority": "high",
+      "title": "No Redis Authentication Enforcement",
+      "description": "Redis can be used without authentication in production. No validation that Redis URL includes password or uses TLS.",
+      "location": "src/config/manager.ts",
+      "impact": "High - Unauthorized Redis access, session theft",
+      "recommendation": "Enforce Redis authentication and TLS in production",
+      "effort": "low",
+      "tags": ["security", "redis", "authentication"],
+      "relatedIssues": ["SEC-005", "ERR-004", "CONF-002"]
+    },
+    {
+      "id": "PERF-001",
+      "category": "Performance",
+      "priority": "critical",
+      "title": "No Memory Management in Streaming",
+      "description": "Streaming handler accumulates all content blocks indefinitely without cleanup. For long responses (10K+ tokens), this could be 40KB+ in memory with no cleanup after yielding chunks.",
+      "location": "src/streaming/streaming-handler.ts",
+      "impact": "Critical - Memory leak potential for long responses",
+      "recommendation": "Implement sliding window for content blocks (keep last N blocks), add memory limit checks",
+      "effort": "medium",
+      "tags": ["performance", "memory", "streaming"],
+      "relatedIssues": ["ERR-003", "CONF-003"]
+    },
+    {
+      "id": "PERF-002",
+      "category": "Performance",
+      "priority": "high",
+      "title": "Missing Parallelization in Request Pipeline",
+      "description": "Request pipeline operations are sequential when they could be parallel. Cache check + classification (saves 100-200ms), context optimization + account selection (saves 10-20ms). Total potential savings: 110-220ms per request (26-30% reduction).",
+      "location": "src/server/routes.ts",
+      "impact": "High - 110-220ms unnecessary latency per request",
+      "recommendation": "Parallelize independent operations using Promise.all()",
+      "effort": "low",
+      "tags": ["performance", "latency", "optimization"],
+      "relatedIssues": ["ARCH-001", "PERF-004"]
+    },
+    {
+      "id": "PERF-003",
+      "category": "Performance",
+      "priority": "high",
+      "title": "No Connection Pooling for External APIs",
+      "description": "No connection pooling for Voyage AI API, Qdrant REST client, or Anthropic SDK. Each request may create new TCP connection.",
+      "location": "src/optimizers/semantic-deduplication.ts",
+      "impact": "High - TCP connection overhead, potential connection exhaustion",
+      "recommendation": "Configure HTTP agents with connection pooling (keepAlive: true, maxSockets: 50)",
+      "effort": "medium",
+      "tags": ["performance", "connections", "http"],
+      "relatedIssues": ["PERF-004", "PERF-005"]
+    },
+    {
+      "id": "PERF-004",
+      "category": "Performance",
+      "priority": "high",
+      "title": "Synchronous Embedding Generation",
+      "description": "Embedding generation blocks request for ~200ms. No batch processing, no connection pooling, no circuit breaker.",
+      "location": "src/optimizers/semantic-deduplication.ts",
+      "impact": "High - 200ms blocking per cache check",
+      "recommendation": "Implement async queue with batching for embedding generation",
+      "effort": "high",
+      "tags": ["performance", "async", "embeddings"],
+      "relatedIssues": ["PERF-002", "PERF-003", "PERF-005"]
+    },
+    {
+      "id": "PERF-005",
+      "category": "Performance",
+      "priority": "high",
+      "title": "No Circuit Breaker Pattern",
+      "description": "No circuit breaker for external services. Continues trying even if service is slow/down, causing cascading failures.",
+      "location": "src/server/routes.ts, all external API calls",
+      "impact": "High - Cascading failures when dependencies are slow/down",
+      "recommendation": "Implement circuit breaker using opossum library",
+      "effort": "medium",
+      "tags": ["performance", "reliability", "circuit-breaker"],
+      "relatedIssues": ["PERF-003", "PERF-004", "ERR-006", "SEC-001"]
+    },
+    {
+      "id": "PERF-006",
+      "category": "Performance",
+      "priority": "high",
+      "title": "Fixed Cache Thresholds",
+      "description": "Cache optimization uses fixed thresholds (1024 tokens, 2000 tokens, 5 messages) that are not adaptive based on actual performance.",
+      "location": "src/optimizers/cache-optimizer.ts",
+      "impact": "Medium - Suboptimal cache hit rates",
+      "recommendation": "Implement adaptive thresholds based on metrics",
+      "effort": "medium",
+      "tags": ["performance", "caching", "optimization"],
+      "relatedIssues": ["QUAL-002"]
+    },
+    {
+      "id": "PERF-007",
+      "category": "Performance",
+      "priority": "medium",
+      "title": "No Retry Jitter",
+      "description": "Retry logic has no jitter, causing thundering herd problem when multiple clients retry simultaneously.",
+      "location": "src/server/routes.ts",
+      "impact": "Medium - Thundering herd problem on retries",
+      "recommendation": "Add random jitter to retry delays: delay * (0.5 + Math.random() * 0.5)",
+      "effort": "low",
+      "tags": ["performance", "retry", "reliability"],
+      "relatedIssues": ["QUAL-002", "ERR-006"]
+    },
+    {
+      "id": "PERF-008",
+      "category": "Performance",
+      "priority": "medium",
+      "title": "Potential N+1 Queries in Analytics",
+      "description": "Analytics engine may have N+1 query patterns. Each metric might be a separate Redis call without batching.",
+      "location": "src/analytics/analytics-engine.ts",
+      "impact": "Medium - Slow analytics queries",
+      "recommendation": "Use Redis pipelines for batch operations",
+      "effort": "medium",
+      "tags": ["performance", "database", "n+1"],
+      "relatedIssues": ["ARCH-001"]
+    },
+    {
+      "id": "DOC-001",
+      "category": "Documentation",
+      "priority": "high",
+      "title": "Missing Architecture Decision Records (ADRs)",
+      "description": "No ADRs documenting key architectural decisions. Makes it difficult to understand why certain design decisions were made.",
+      "location": "docs/adr/",
+      "impact": "Medium - Difficult to understand design rationale",
+      "recommendation": "Create ADRs for 8-10 key decisions (pipeline architecture, Qdrant choice, Redis caching, etc.)",
+      "effort": "medium",
+      "tags": ["documentation", "adr", "architecture"],
+      "relatedIssues": ["QUAL-004", "DOC-002"]
+    },
+    {
+      "id": "DOC-002",
+      "category": "Documentation",
+      "priority": "high",
+      "title": "Missing Troubleshooting Guide",
+      "description": "No troubleshooting guide for common issues. Users struggle to diagnose and fix problems.",
+      "location": "docs/TROUBLESHOOTING.md",
+      "impact": "High - Users struggle with common issues",
+      "recommendation": "Create comprehensive troubleshooting guide with common errors, debugging workflows, and log analysis",
+      "effort": "medium",
+      "tags": ["documentation", "troubleshooting", "support"],
+      "relatedIssues": ["DOC-001", "ERR-005", "ERR-007"]
+    },
+    {
+      "id": "DOC-003",
+      "category": "Documentation",
+      "priority": "high",
+      "title": "Missing Performance Tuning Guide",
+      "description": "No performance tuning guide. Users don't know how to optimize for their workload.",
+      "location": "docs/PERFORMANCE.md",
+      "impact": "Medium - Users can't optimize performance",
+      "recommendation": "Create performance tuning guide with benchmarks, tuning parameters, and optimization strategies",
+      "effort": "medium",
+      "tags": ["documentation", "performance", "tuning"],
+      "relatedIssues": ["PERF-006", "DOC-004"]
+    },
+    {
+      "id": "DOC-004",
+      "category": "Documentation",
+      "priority": "high",
+      "title": "Missing Security Best Practices",
+      "description": "No security documentation. Users may deploy insecurely.",
+      "location": "docs/SECURITY.md",
+      "impact": "High - Users may deploy insecurely",
+      "recommendation": "Create security guide covering API key management, network security, data encryption, access control",
+      "effort": "low",
+      "tags": ["documentation", "security", "best-practices"],
+      "relatedIssues": ["SEC-001", "SEC-002", "SEC-003", "SEC-004", "DOC-003"]
+    },
+    {
+      "id": "CONF-001",
+      "category": "Configuration & Environment",
+      "priority": "medium",
+      "title": "Incomplete .env.example",
+      "description": ".env.example is missing optimization settings, Bedrock provider documentation, baseURL documentation, and Kiro combo configuration. Only ~60% of available configuration options are documented.",
+      "location": ".env.example",
+      "impact": "Medium - Developers unaware of available configuration options",
+      "recommendation": "Add all missing environment variables with descriptions",
+      "effort": "low",
+      "tags": ["configuration", "documentation"],
+      "relatedIssues": ["CONF-002", "DOC-001"]
+    },
+    {
+      "id": "CONF-002",
+      "category": "Configuration & Environment",
+      "priority": "medium",
+      "title": "Empty Accounts Array Default",
+      "description": "Default config has empty accounts array. Server will fail to start without at least one account, but error message is unclear.",
+      "location": "src/config/manager.ts",
+      "impact": "Medium - Confusing error message for new users",
+      "recommendation": "Add startup validation with clear error message requiring at least one account",
+      "effort": "low",
+      "tags": ["configuration", "validation"],
+      "relatedIssues": ["CONF-001", "TEST-005", "SEC-008"]
+    },
+    {
+      "id": "CONF-003",
+      "category": "Configuration & Environment",
+      "priority": "medium",
+      "title": "Hot Reload Watcher Not Cleaned Up",
+      "description": "Hot reload watcher is not properly cleaned up. No way to stop watching or clean up resources. Memory leak if enableHotReload() called multiple times.",
+      "location": "src/config/manager.ts",
+      "impact": "Medium - Potential memory leak",
+      "recommendation": "Add cleanup method and AbortController for proper watcher management",
+      "effort": "low",
+      "tags": ["configuration", "memory", "cleanup"],
+      "relatedIssues": ["PERF-001", "TEST-005"]
+    }
+  ]
+}

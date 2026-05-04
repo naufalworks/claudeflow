@@ -1,0 +1,1512 @@
+{
+  "timestamp": "2026-05-02T16:27:57.846Z",
+  "summary": {
+    "totalFiles": 64,
+    "totalFunctions": 1309,
+    "totalLines": 16361,
+    "avgComplexity": 3.7,
+    "avgFunctionLength": 18.52,
+    "complexityDistribution": {
+      "low": 1254,
+      "moderate": 42,
+      "high": 6,
+      "veryHigh": 7
+    }
+  },
+  "highComplexityFunctions": [
+    {
+      "name": "setupCommands",
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 676,
+      "complexity": 94,
+      "nestingDepth": 4,
+      "startLine": 55
+    },
+    {
+      "name": "setupCommands",
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 676,
+      "complexity": 94,
+      "nestingDepth": 4,
+      "startLine": 55
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "parse",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 85,
+      "complexity": 38,
+      "nestingDepth": 5,
+      "startLine": 53
+    },
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "parseUsage",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 101,
+      "complexity": 24,
+      "nestingDepth": 5,
+      "startLine": 418
+    },
+    {
+      "name": "catch",
+      "file": "src/server/routes.ts",
+      "lines": 60,
+      "complexity": 21,
+      "nestingDepth": 4,
+      "startLine": 774
+    },
+    {
+      "name": "generateInsights",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 145,
+      "complexity": 20,
+      "nestingDepth": 5,
+      "startLine": 373
+    },
+    {
+      "name": "catch",
+      "file": "src/server/routes.ts",
+      "lines": 92,
+      "complexity": 19,
+      "nestingDepth": 5,
+      "startLine": 421
+    },
+    {
+      "name": "sessionStatusCommand",
+      "file": "src/cli/commands/session.ts",
+      "lines": 113,
+      "complexity": 18,
+      "nestingDepth": 5,
+      "startLine": 16
+    },
+    {
+      "name": "sessionStatusCommand",
+      "file": "src/cli/commands/session.ts",
+      "lines": 113,
+      "complexity": 18,
+      "nestingDepth": 5,
+      "startLine": 16
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "formatRelativeTime",
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 39,
+      "complexity": 17,
+      "nestingDepth": 3,
+      "startLine": 159
+    },
+    {
+      "name": "formatRelativeTime",
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 39,
+      "complexity": 17,
+      "nestingDepth": 3,
+      "startLine": 159
+    },
+    {
+      "name": "parseStream",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 76,
+      "complexity": 17,
+      "nestingDepth": 6,
+      "startLine": 35
+    },
+    {
+      "name": "getMetrics",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 47,
+      "complexity": 16,
+      "nestingDepth": 4,
+      "startLine": 173
+    },
+    {
+      "name": "loginCommand",
+      "file": "src/cli/commands/login.ts",
+      "lines": 125,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 21
+    },
+    {
+      "name": "loginCommand",
+      "file": "src/cli/commands/login.ts",
+      "lines": 125,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 21
+    },
+    {
+      "name": "parse",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 67,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 114
+    },
+    {
+      "name": "updateState",
+      "file": "src/streaming/streaming-handler.ts",
+      "lines": 56,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 158
+    },
+    {
+      "name": "switch",
+      "file": "src/streaming/streaming-handler.ts",
+      "lines": 55,
+      "complexity": 15,
+      "nestingDepth": 4,
+      "startLine": 158
+    },
+    {
+      "name": "extractPromptText",
+      "file": "src/optimizers/semantic-deduplication.ts",
+      "lines": 37,
+      "complexity": 14,
+      "nestingDepth": 7,
+      "startLine": 151
+    },
+    {
+      "name": "parseMessageStartChunk",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 116,
+      "complexity": 14,
+      "nestingDepth": 5,
+      "startLine": 524
+    },
+    {
+      "name": "aggregateMetrics",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 105,
+      "complexity": 13,
+      "nestingDepth": 3,
+      "startLine": 224
+    },
+    {
+      "name": "accountAddCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 136,
+      "complexity": 13,
+      "nestingDepth": 5,
+      "startLine": 20
+    },
+    {
+      "name": "accountAddCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 136,
+      "complexity": 13,
+      "nestingDepth": 5,
+      "startLine": 20
+    },
+    {
+      "name": "maskSensitiveData",
+      "file": "src/cli/utils/logger.ts",
+      "lines": 50,
+      "complexity": 13,
+      "nestingDepth": 6,
+      "startLine": 155
+    },
+    {
+      "name": "loadFromEnvironment",
+      "file": "src/config/manager.ts",
+      "lines": 67,
+      "complexity": 13,
+      "nestingDepth": 5,
+      "startLine": 53
+    },
+    {
+      "name": "accountShowCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 64,
+      "complexity": 12,
+      "nestingDepth": 4,
+      "startLine": 284
+    },
+    {
+      "name": "accountShowCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 64,
+      "complexity": 12,
+      "nestingDepth": 4,
+      "startLine": 284
+    },
+    {
+      "name": "if",
+      "file": "src/cli/utils/logger.ts",
+      "lines": 26,
+      "complexity": 12,
+      "nestingDepth": 5,
+      "startLine": 176
+    },
+    {
+      "name": "topologicalSort",
+      "file": "src/orchestrators/tool-orchestrator.ts",
+      "lines": 56,
+      "complexity": 12,
+      "nestingDepth": 4,
+      "startLine": 104
+    },
+    {
+      "name": "parseMessages",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 88,
+      "complexity": 12,
+      "nestingDepth": 6,
+      "startLine": 208
+    },
+    {
+      "name": "parseContentBlockDeltaChunk",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 88,
+      "complexity": 12,
+      "nestingDepth": 5,
+      "startLine": 677
+    },
+    {
+      "name": "for",
+      "file": "src/server/routes.ts",
+      "lines": 143,
+      "complexity": 12,
+      "nestingDepth": 5,
+      "startLine": 236
+    },
+    {
+      "name": "for",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 14,
+      "complexity": 11,
+      "nestingDepth": 2,
+      "startLine": 198
+    },
+    {
+      "name": "for",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 29,
+      "complexity": 11,
+      "nestingDepth": 2,
+      "startLine": 249
+    },
+    {
+      "name": "configSetCommand",
+      "file": "src/cli/commands/config.ts",
+      "lines": 64,
+      "complexity": 11,
+      "nestingDepth": 5,
+      "startLine": 70
+    },
+    {
+      "name": "configSetCommand",
+      "file": "src/cli/commands/config.ts",
+      "lines": 64,
+      "complexity": 11,
+      "nestingDepth": 5,
+      "startLine": 70
+    },
+    {
+      "name": "formatTimeUntilExpiry",
+      "file": "src/cli/services/auth-service.ts",
+      "lines": 20,
+      "complexity": 11,
+      "nestingDepth": 3,
+      "startLine": 272
+    },
+    {
+      "name": "formatProgressBar",
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 33,
+      "complexity": 11,
+      "nestingDepth": 3,
+      "startLine": 40
+    },
+    {
+      "name": "formatProgressBar",
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 33,
+      "complexity": 11,
+      "nestingDepth": 3,
+      "startLine": 40
+    },
+    {
+      "name": "estimateTokens",
+      "file": "src/optimizers/context-optimizer.ts",
+      "lines": 24,
+      "complexity": 11,
+      "nestingDepth": 5,
+      "startLine": 146
+    }
+  ],
+  "longFunctions": [
+    {
+      "name": "setupCommands",
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 676,
+      "complexity": 94,
+      "nestingDepth": 4,
+      "startLine": 55
+    },
+    {
+      "name": "setupCommands",
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 676,
+      "complexity": 94,
+      "nestingDepth": 4,
+      "startLine": 55
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "for",
+      "file": "src/server/routes.ts",
+      "lines": 162,
+      "complexity": 11,
+      "nestingDepth": 7,
+      "startLine": 600
+    },
+    {
+      "name": "generateInsights",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 145,
+      "complexity": 20,
+      "nestingDepth": 5,
+      "startLine": 373
+    },
+    {
+      "name": "for",
+      "file": "src/server/routes.ts",
+      "lines": 143,
+      "complexity": 12,
+      "nestingDepth": 5,
+      "startLine": 236
+    },
+    {
+      "name": "accountAddCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 136,
+      "complexity": 13,
+      "nestingDepth": 5,
+      "startLine": 20
+    },
+    {
+      "name": "accountAddCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 136,
+      "complexity": 13,
+      "nestingDepth": 5,
+      "startLine": 20
+    },
+    {
+      "name": "loginCommand",
+      "file": "src/cli/commands/login.ts",
+      "lines": 125,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 21
+    },
+    {
+      "name": "loginCommand",
+      "file": "src/cli/commands/login.ts",
+      "lines": 125,
+      "complexity": 15,
+      "nestingDepth": 5,
+      "startLine": 21
+    },
+    {
+      "name": "handleMetricsRequest",
+      "file": "src/server/routes.ts",
+      "lines": 124,
+      "complexity": 4,
+      "nestingDepth": 6,
+      "startLine": 985
+    },
+    {
+      "name": "handleMetricsRequest",
+      "file": "src/server/routes.ts",
+      "lines": 124,
+      "complexity": 4,
+      "nestingDepth": 6,
+      "startLine": 985
+    },
+    {
+      "name": "parseMessageStartChunk",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 116,
+      "complexity": 14,
+      "nestingDepth": 5,
+      "startLine": 524
+    },
+    {
+      "name": "createServer",
+      "file": "src/server/index.ts",
+      "lines": 114,
+      "complexity": 2,
+      "nestingDepth": 5,
+      "startLine": 11
+    },
+    {
+      "name": "createServer",
+      "file": "src/server/index.ts",
+      "lines": 114,
+      "complexity": 2,
+      "nestingDepth": 5,
+      "startLine": 11
+    },
+    {
+      "name": "sessionStatusCommand",
+      "file": "src/cli/commands/session.ts",
+      "lines": 113,
+      "complexity": 18,
+      "nestingDepth": 5,
+      "startLine": 16
+    },
+    {
+      "name": "sessionStatusCommand",
+      "file": "src/cli/commands/session.ts",
+      "lines": 113,
+      "complexity": 18,
+      "nestingDepth": 5,
+      "startLine": 16
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "aggregateMetrics",
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 105,
+      "complexity": 13,
+      "nestingDepth": 3,
+      "startLine": 224
+    },
+    {
+      "name": "parseUsage",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 101,
+      "complexity": 24,
+      "nestingDepth": 5,
+      "startLine": 418
+    },
+    {
+      "name": "comboCreateCommand",
+      "file": "src/cli/commands/combo.ts",
+      "lines": 100,
+      "complexity": 9,
+      "nestingDepth": 6,
+      "startLine": 17
+    },
+    {
+      "name": "comboCreateCommand",
+      "file": "src/cli/commands/combo.ts",
+      "lines": 100,
+      "complexity": 9,
+      "nestingDepth": 6,
+      "startLine": 17
+    },
+    {
+      "name": "catch",
+      "file": "src/server/routes.ts",
+      "lines": 96,
+      "complexity": 9,
+      "nestingDepth": 6,
+      "startLine": 665
+    },
+    {
+      "name": "catch",
+      "file": "src/server/routes.ts",
+      "lines": 92,
+      "complexity": 19,
+      "nestingDepth": 5,
+      "startLine": 421
+    },
+    {
+      "name": "catch",
+      "file": "src/server/routes.ts",
+      "lines": 89,
+      "complexity": 9,
+      "nestingDepth": 4,
+      "startLine": 289
+    },
+    {
+      "name": "parseMessages",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 88,
+      "complexity": 12,
+      "nestingDepth": 6,
+      "startLine": 208
+    },
+    {
+      "name": "parseContentBlockDeltaChunk",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 88,
+      "complexity": 12,
+      "nestingDepth": 5,
+      "startLine": 677
+    },
+    {
+      "name": "getMetrics",
+      "file": "src/cli/services/analytics-service.ts",
+      "lines": 87,
+      "complexity": 10,
+      "nestingDepth": 2,
+      "startLine": 135
+    },
+    {
+      "name": "parse",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 85,
+      "complexity": 38,
+      "nestingDepth": 5,
+      "startLine": 53
+    },
+    {
+      "name": "handleAnalyticsRequest",
+      "file": "src/server/routes.ts",
+      "lines": 83,
+      "complexity": 7,
+      "nestingDepth": 4,
+      "startLine": 896
+    },
+    {
+      "name": "handleAnalyticsRequest",
+      "file": "src/server/routes.ts",
+      "lines": 83,
+      "complexity": 7,
+      "nestingDepth": 4,
+      "startLine": 896
+    },
+    {
+      "name": "healthCheckCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 79,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 30
+    },
+    {
+      "name": "healthCheckCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 79,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 30
+    },
+    {
+      "name": "parseStream",
+      "file": "src/parsers/response-parser.ts",
+      "lines": 76,
+      "complexity": 17,
+      "nestingDepth": 6,
+      "startLine": 35
+    },
+    {
+      "name": "accountListCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 75,
+      "complexity": 10,
+      "nestingDepth": 3,
+      "startLine": 205
+    },
+    {
+      "name": "accountListCommand",
+      "file": "src/cli/commands/account.ts",
+      "lines": 75,
+      "complexity": 10,
+      "nestingDepth": 3,
+      "startLine": 205
+    },
+    {
+      "name": "main",
+      "file": "src/index.ts",
+      "lines": 74,
+      "complexity": 5,
+      "nestingDepth": 5,
+      "startLine": 7
+    },
+    {
+      "name": "main",
+      "file": "src/index.ts",
+      "lines": 74,
+      "complexity": 5,
+      "nestingDepth": 5,
+      "startLine": 7
+    },
+    {
+      "name": "fetchQuotaData",
+      "file": "src/cli/commands/quota.ts",
+      "lines": 73,
+      "complexity": 10,
+      "nestingDepth": 5,
+      "startLine": 86
+    },
+    {
+      "name": "fetchQuotaData",
+      "file": "src/cli/commands/quota.ts",
+      "lines": 73,
+      "complexity": 10,
+      "nestingDepth": 5,
+      "startLine": 86
+    },
+    {
+      "name": "quotaWatchCommand",
+      "file": "src/cli/commands/quota.ts",
+      "lines": 67,
+      "complexity": 6,
+      "nestingDepth": 5,
+      "startLine": 270
+    },
+    {
+      "name": "quotaWatchCommand",
+      "file": "src/cli/commands/quota.ts",
+      "lines": 67,
+      "complexity": 6,
+      "nestingDepth": 5,
+      "startLine": 270
+    }
+  ],
+  "deeplyNestedFunctions": [
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "handleStreamingRequest",
+      "file": "src/server/routes.ts",
+      "lines": 311,
+      "complexity": 32,
+      "nestingDepth": 9,
+      "startLine": 524
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "logsCommand",
+      "file": "src/cli/commands/logs.ts",
+      "lines": 106,
+      "complexity": 17,
+      "nestingDepth": 7,
+      "startLine": 57
+    },
+    {
+      "name": "extractPromptText",
+      "file": "src/optimizers/semantic-deduplication.ts",
+      "lines": 37,
+      "complexity": 14,
+      "nestingDepth": 7,
+      "startLine": 151
+    },
+    {
+      "name": "parseMessageContent",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 32,
+      "complexity": 5,
+      "nestingDepth": 7,
+      "startLine": 297
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "handleMessagesRequest",
+      "file": "src/server/routes.ts",
+      "lines": 408,
+      "complexity": 43,
+      "nestingDepth": 7,
+      "startLine": 106
+    },
+    {
+      "name": "for",
+      "file": "src/server/routes.ts",
+      "lines": 162,
+      "complexity": 11,
+      "nestingDepth": 7,
+      "startLine": 600
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "analyticsShowCommand",
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 173,
+      "complexity": 26,
+      "nestingDepth": 6,
+      "startLine": 82
+    },
+    {
+      "name": "comboCreateCommand",
+      "file": "src/cli/commands/combo.ts",
+      "lines": 100,
+      "complexity": 9,
+      "nestingDepth": 6,
+      "startLine": 17
+    },
+    {
+      "name": "comboCreateCommand",
+      "file": "src/cli/commands/combo.ts",
+      "lines": 100,
+      "complexity": 9,
+      "nestingDepth": 6,
+      "startLine": 17
+    },
+    {
+      "name": "healthCheckCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 79,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 30
+    },
+    {
+      "name": "healthTestCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 64,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 113
+    },
+    {
+      "name": "healthCheckCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 79,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 30
+    },
+    {
+      "name": "healthTestCommand",
+      "file": "src/cli/commands/health.ts",
+      "lines": 64,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 113
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "setupCommand",
+      "file": "src/cli/commands/setup.ts",
+      "lines": 342,
+      "complexity": 29,
+      "nestingDepth": 6,
+      "startLine": 19
+    },
+    {
+      "name": "start",
+      "file": "src/cli/services/daemon-service.ts",
+      "lines": 58,
+      "complexity": 5,
+      "nestingDepth": 6,
+      "startLine": 79
+    },
+    {
+      "name": "stop",
+      "file": "src/cli/services/daemon-service.ts",
+      "lines": 45,
+      "complexity": 5,
+      "nestingDepth": 6,
+      "startLine": 141
+    },
+    {
+      "name": "restart",
+      "file": "src/cli/services/daemon-service.ts",
+      "lines": 36,
+      "complexity": 4,
+      "nestingDepth": 6,
+      "startLine": 190
+    },
+    {
+      "name": "createBackup",
+      "file": "src/cli/utils/file-manager.ts",
+      "lines": 62,
+      "complexity": 6,
+      "nestingDepth": 6,
+      "startLine": 60
+    },
+    {
+      "name": "rotateLogs",
+      "file": "src/cli/utils/file-manager.ts",
+      "lines": 41,
+      "complexity": 7,
+      "nestingDepth": 6,
+      "startLine": 270
+    },
+    {
+      "name": "maskSensitiveData",
+      "file": "src/cli/utils/logger.ts",
+      "lines": 50,
+      "complexity": 13,
+      "nestingDepth": 6,
+      "startLine": 155
+    },
+    {
+      "name": "enableHotReload",
+      "file": "src/config/manager.ts",
+      "lines": 30,
+      "complexity": 6,
+      "nestingDepth": 6,
+      "startLine": 177
+    },
+    {
+      "name": "compressMessages",
+      "file": "src/optimizers/context-optimizer.ts",
+      "lines": 38,
+      "complexity": 3,
+      "nestingDepth": 6,
+      "startLine": 61
+    },
+    {
+      "name": "estimateTokens",
+      "file": "src/optimizers/request-classifier.ts",
+      "lines": 30,
+      "complexity": 11,
+      "nestingDepth": 6,
+      "startLine": 102
+    },
+    {
+      "name": "for",
+      "file": "src/optimizers/semantic-deduplication.ts",
+      "lines": 18,
+      "complexity": 10,
+      "nestingDepth": 6,
+      "startLine": 167
+    },
+    {
+      "name": "parseMessages",
+      "file": "src/parsers/request-parser.ts",
+      "lines": 88,
+      "complexity": 12,
+      "nestingDepth": 6,
+      "startLine": 208
+    }
+  ],
+  "fileStats": [
+    {
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 739,
+      "functions": 51,
+      "avgComplexity": 6.61,
+      "maxComplexity": 94
+    },
+    {
+      "file": "src/server/routes.ts",
+      "lines": 1109,
+      "functions": 70,
+      "avgComplexity": 5.63,
+      "maxComplexity": 43
+    },
+    {
+      "file": "src/parsers/request-parser.ts",
+      "lines": 893,
+      "functions": 87,
+      "avgComplexity": 3.83,
+      "maxComplexity": 38
+    },
+    {
+      "file": "src/cli/commands/setup.ts",
+      "lines": 361,
+      "functions": 17,
+      "avgComplexity": 5.82,
+      "maxComplexity": 29
+    },
+    {
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 302,
+      "functions": 26,
+      "avgComplexity": 5.38,
+      "maxComplexity": 26
+    },
+    {
+      "file": "src/parsers/response-parser.ts",
+      "lines": 904,
+      "functions": 66,
+      "avgComplexity": 4.09,
+      "maxComplexity": 24
+    },
+    {
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 554,
+      "functions": 28,
+      "avgComplexity": 4.75,
+      "maxComplexity": 20
+    },
+    {
+      "file": "src/cli/commands/session.ts",
+      "lines": 129,
+      "functions": 10,
+      "avgComplexity": 6,
+      "maxComplexity": 18
+    },
+    {
+      "file": "src/cli/commands/logs.ts",
+      "lines": 163,
+      "functions": 17,
+      "avgComplexity": 5.29,
+      "maxComplexity": 17
+    },
+    {
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 235,
+      "functions": 38,
+      "avgComplexity": 4.11,
+      "maxComplexity": 17
+    },
+    {
+      "file": "src/cli/commands/login.ts",
+      "lines": 250,
+      "functions": 16,
+      "avgComplexity": 5.13,
+      "maxComplexity": 15
+    },
+    {
+      "file": "src/streaming/streaming-handler.ts",
+      "lines": 368,
+      "functions": 23,
+      "avgComplexity": 4.52,
+      "maxComplexity": 15
+    },
+    {
+      "file": "src/optimizers/semantic-deduplication.ts",
+      "lines": 239,
+      "functions": 26,
+      "avgComplexity": 3.12,
+      "maxComplexity": 14
+    },
+    {
+      "file": "src/cli/commands/account.ts",
+      "lines": 404,
+      "functions": 31,
+      "avgComplexity": 4.71,
+      "maxComplexity": 13
+    },
+    {
+      "file": "src/cli/utils/logger.ts",
+      "lines": 316,
+      "functions": 29,
+      "avgComplexity": 3.34,
+      "maxComplexity": 13
+    },
+    {
+      "file": "src/config/manager.ts",
+      "lines": 208,
+      "functions": 25,
+      "avgComplexity": 3.24,
+      "maxComplexity": 13
+    },
+    {
+      "file": "src/orchestrators/tool-orchestrator.ts",
+      "lines": 234,
+      "functions": 18,
+      "avgComplexity": 3.67,
+      "maxComplexity": 12
+    },
+    {
+      "file": "src/cli/commands/config.ts",
+      "lines": 177,
+      "functions": 18,
+      "avgComplexity": 4.56,
+      "maxComplexity": 11
+    },
+    {
+      "file": "src/cli/services/auth-service.ts",
+      "lines": 311,
+      "functions": 29,
+      "avgComplexity": 3.1,
+      "maxComplexity": 11
+    },
+    {
+      "file": "src/optimizers/context-optimizer.ts",
+      "lines": 192,
+      "functions": 20,
+      "avgComplexity": 3.5,
+      "maxComplexity": 11
+    },
+    {
+      "file": "src/optimizers/request-classifier.ts",
+      "lines": 289,
+      "functions": 33,
+      "avgComplexity": 3.82,
+      "maxComplexity": 11
+    },
+    {
+      "file": "src/parsers/request-formatter.ts",
+      "lines": 181,
+      "functions": 19,
+      "avgComplexity": 3.32,
+      "maxComplexity": 11
+    },
+    {
+      "file": "src/cli/commands/daemon.ts",
+      "lines": 264,
+      "functions": 26,
+      "avgComplexity": 4.58,
+      "maxComplexity": 10
+    },
+    {
+      "file": "src/cli/commands/health.ts",
+      "lines": 177,
+      "functions": 18,
+      "avgComplexity": 5.06,
+      "maxComplexity": 10
+    },
+    {
+      "file": "src/cli/commands/quota.ts",
+      "lines": 337,
+      "functions": 30,
+      "avgComplexity": 3.77,
+      "maxComplexity": 10
+    },
+    {
+      "file": "src/cli/services/analytics-service.ts",
+      "lines": 449,
+      "functions": 27,
+      "avgComplexity": 2.93,
+      "maxComplexity": 10
+    },
+    {
+      "file": "src/cli/commands/combo.ts",
+      "lines": 372,
+      "functions": 32,
+      "avgComplexity": 3.94,
+      "maxComplexity": 9
+    },
+    {
+      "file": "src/parsers/response-formatter.ts",
+      "lines": 120,
+      "functions": 9,
+      "avgComplexity": 3.67,
+      "maxComplexity": 9
+    },
+    {
+      "file": "src/accounts/account-pool-manager.ts",
+      "lines": 445,
+      "functions": 36,
+      "avgComplexity": 2.56,
+      "maxComplexity": 8
+    },
+    {
+      "file": "src/accounts/kiro-auth-manager.ts",
+      "lines": 467,
+      "functions": 37,
+      "avgComplexity": 2.24,
+      "maxComplexity": 8
+    },
+    {
+      "file": "src/cli/commands/autostart.ts",
+      "lines": 206,
+      "functions": 23,
+      "avgComplexity": 3.78,
+      "maxComplexity": 8
+    },
+    {
+      "file": "src/cli/services/config-service.ts",
+      "lines": 494,
+      "functions": 41,
+      "avgComplexity": 2.51,
+      "maxComplexity": 8
+    },
+    {
+      "file": "src/accounts/kiro-mitm-client.ts",
+      "lines": 234,
+      "functions": 18,
+      "avgComplexity": 2.5,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/cli/commands/profile.ts",
+      "lines": 196,
+      "functions": 17,
+      "avgComplexity": 4,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/cli/services/daemon-service.ts",
+      "lines": 478,
+      "functions": 46,
+      "avgComplexity": 2.46,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/cli/services/health-service.ts",
+      "lines": 390,
+      "functions": 17,
+      "avgComplexity": 3.41,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/cli/utils/file-manager.ts",
+      "lines": 430,
+      "functions": 31,
+      "avgComplexity": 2.68,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/optimizers/cache-optimizer.ts",
+      "lines": 191,
+      "functions": 14,
+      "avgComplexity": 2.29,
+      "maxComplexity": 7
+    },
+    {
+      "file": "src/scripts/verify-infrastructure.ts",
+      "lines": 220,
+      "functions": 20,
+      "avgComplexity": 3.65,
+      "maxComplexity": 6
+    },
+    {
+      "file": "src/cli/commands/backup.ts",
+      "lines": 237,
+      "functions": 23,
+      "avgComplexity": 2.91,
+      "maxComplexity": 5
+    },
+    {
+      "file": "src/index.ts",
+      "lines": 83,
+      "functions": 7,
+      "avgComplexity": 3.14,
+      "maxComplexity": 5
+    },
+    {
+      "file": "src/infrastructure/anthropic.ts",
+      "lines": 60,
+      "functions": 5,
+      "avgComplexity": 1.6,
+      "maxComplexity": 4
+    },
+    {
+      "file": "src/cli/utils/crypto.ts",
+      "lines": 189,
+      "functions": 26,
+      "avgComplexity": 2.04,
+      "maxComplexity": 3
+    },
+    {
+      "file": "src/cli/utils/validator.ts",
+      "lines": 325,
+      "functions": 54,
+      "avgComplexity": 2.09,
+      "maxComplexity": 3
+    },
+    {
+      "file": "src/infrastructure/qdrant.ts",
+      "lines": 65,
+      "functions": 9,
+      "avgComplexity": 1.67,
+      "maxComplexity": 3
+    },
+    {
+      "file": "src/infrastructure/voyage.ts",
+      "lines": 61,
+      "functions": 4,
+      "avgComplexity": 2,
+      "maxComplexity": 3
+    },
+    {
+      "file": "src/optimizers/thinking-budget-optimizer.ts",
+      "lines": 59,
+      "functions": 3,
+      "avgComplexity": 2.33,
+      "maxComplexity": 3
+    },
+    {
+      "file": "src/infrastructure/redis.ts",
+      "lines": 74,
+      "functions": 7,
+      "avgComplexity": 1.43,
+      "maxComplexity": 2
+    },
+    {
+      "file": "src/server/index.ts",
+      "lines": 138,
+      "functions": 6,
+      "avgComplexity": 2,
+      "maxComplexity": 2
+    },
+    {
+      "file": "src/infrastructure/index.ts",
+      "lines": 64,
+      "functions": 4,
+      "avgComplexity": 1,
+      "maxComplexity": 1
+    },
+    {
+      "file": "src/types/anthropic.types.ts",
+      "lines": 403,
+      "functions": 22,
+      "avgComplexity": 1,
+      "maxComplexity": 1
+    },
+    {
+      "file": "src/accounts/index.ts",
+      "lines": 25,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/analytics/index.ts",
+      "lines": 14,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/cli/commands/index.ts",
+      "lines": 54,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/cli/services/index.ts",
+      "lines": 12,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/cli/types/cli.types.ts",
+      "lines": 299,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/cli/utils/index.ts",
+      "lines": 12,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/config/index.ts",
+      "lines": 3,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/config/schema.ts",
+      "lines": 109,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/optimizers/index.ts",
+      "lines": 12,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/orchestrators/index.ts",
+      "lines": 8,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/parsers/index.ts",
+      "lines": 11,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/streaming/index.ts",
+      "lines": 7,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    },
+    {
+      "file": "src/types/index.ts",
+      "lines": 9,
+      "functions": 0,
+      "avgComplexity": 0,
+      "maxComplexity": 0
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+src/parsers/request-parser.ts:67:      const req = rawRequest as Record<string, unknown>;
+src/parsers/request-parser.ts:80:      const system = req.system !== undefined ? this.parseSystem(req.system) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:81:      if (!system.success) return system as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:83:      const temperature = req.temperature !== undefined ? this.parseTemperature(req.temperature) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:84:      if (!temperature.success) return temperature as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:86:      const topP = req.top_p !== undefined ? this.parseTopP(req.top_p) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:87:      if (!topP.success) return topP as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:89:      const topK = req.top_k !== undefined ? this.parseTopK(req.top_k) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:90:      if (!topK.success) return topK as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:92:      const stopSequences = req.stop_sequences !== undefined ? this.parseStopSequences(req.stop_sequences) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:93:      if (!stopSequences.success) return stopSequences as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:95:      const stream = req.stream !== undefined ? this.parseStream(req.stream) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:96:      if (!stream.success) return stream as Result<AnthropicRequest, ParseError>;
+src/parsers/request-parser.ts:98:      const metadata = req.metadata !== undefined ? this.parseMetadata(req.metadata) : { success: true as const, value: undefined };
+src/parsers/request-parser.ts:99:      if (!metadata.success) return metadata as Result<AnthropicRequest, ParseError>;

@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto-Index New Steering Files",
+  "description": "Automatically indexes new steering files into adaptive-memory when they are created",
+  "version": "1",
+  "when": {
+    "type": "fileCreated",
+    "patterns": [
+      "~/.kiro/steering/*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A new steering file was just created. Read the new file and call mcp_adaptive_memory_store_memory to index it with type='context', appropriate tags from the frontmatter, and the full content. Keep this silent - don't report to user unless there's an error."
+  }
+}

@@ -1,0 +1,466 @@
+{
+  "summary": {
+    "overall": {
+      "lines": 25.42,
+      "statements": 25.55,
+      "functions": 30.04,
+      "branches": 23.19
+    },
+    "status": "poor",
+    "totalLines": 4597,
+    "coveredLines": 1169,
+    "totalFunctions": 609,
+    "coveredFunctions": 183,
+    "totalBranches": 1811,
+    "coveredBranches": 420
+  },
+  "untestedFiles": [
+    {
+      "file": "src/index.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "entry-point",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/bin/claudeflow.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-entry",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/commands/account.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/analytics.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/autostart.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "low"
+    },
+    {
+      "file": "src/cli/commands/backup.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/combo.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/config.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/daemon.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/commands/health.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/login.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/commands/logs.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "low"
+    },
+    {
+      "file": "src/cli/commands/profile.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/quota.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/session.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/commands/setup.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-command",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/services/analytics-service.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-service",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/services/auth-service.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-service",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/services/config-service.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-service",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/services/daemon-service.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-service",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/services/health-service.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-service",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/utils/crypto.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-util",
+      "priority": "high"
+    },
+    {
+      "file": "src/cli/utils/file-manager.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-util",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/utils/formatter.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-util",
+      "priority": "low"
+    },
+    {
+      "file": "src/cli/utils/logger.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-util",
+      "priority": "medium"
+    },
+    {
+      "file": "src/cli/utils/validator.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "cli-util",
+      "priority": "high"
+    },
+    {
+      "file": "src/config/manager.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "config",
+      "priority": "high"
+    },
+    {
+      "file": "src/config/schema.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "config",
+      "priority": "medium"
+    },
+    {
+      "file": "src/scripts/verify-infrastructure.ts",
+      "lines": 0,
+      "functions": 0,
+      "branches": 0,
+      "category": "script",
+      "priority": "low"
+    }
+  ],
+  "lowCoverageFiles": [
+    {
+      "file": "src/infrastructure/redis.ts",
+      "lines": 6.45,
+      "functions": 0,
+      "branches": 0,
+      "category": "infrastructure",
+      "priority": "high"
+    },
+    {
+      "file": "src/infrastructure/qdrant.ts",
+      "lines": 8,
+      "functions": 0,
+      "branches": 0,
+      "category": "infrastructure",
+      "priority": "high"
+    },
+    {
+      "file": "src/infrastructure/voyage.ts",
+      "lines": 14.28,
+      "functions": 0,
+      "branches": 0,
+      "category": "infrastructure",
+      "priority": "high"
+    },
+    {
+      "file": "src/infrastructure/anthropic.ts",
+      "lines": 16.66,
+      "functions": 0,
+      "branches": 0,
+      "category": "infrastructure",
+      "priority": "high"
+    },
+    {
+      "file": "src/parsers/response-parser.ts",
+      "lines": 38.25,
+      "functions": 59.09,
+      "branches": 29.74,
+      "category": "parser",
+      "priority": "critical"
+    },
+    {
+      "file": "src/infrastructure/index.ts",
+      "lines": 47.61,
+      "functions": 0,
+      "branches": 0,
+      "category": "infrastructure",
+      "priority": "high"
+    },
+    {
+      "file": "src/parsers/request-parser.ts",
+      "lines": 57.92,
+      "functions": 76.92,
+      "branches": 50.78,
+      "category": "parser",
+      "priority": "critical"
+    },
+    {
+      "file": "src/server/routes.ts",
+      "lines": 59.71,
+      "functions": 84.61,
+      "branches": 34.69,
+      "category": "server",
+      "priority": "critical"
+    }
+  ],
+  "wellTestedFiles": [
+    {
+      "file": "src/optimizers/thinking-budget-optimizer.ts",
+      "lines": 100,
+      "functions": 100,
+      "branches": 100,
+      "category": "optimizer"
+    },
+    {
+      "file": "src/optimizers/cache-optimizer.ts",
+      "lines": 97.56,
+      "functions": 100,
+      "branches": 88.88,
+      "category": "optimizer"
+    },
+    {
+      "file": "src/optimizers/context-optimizer.ts",
+      "lines": 96.22,
+      "functions": 100,
+      "branches": 76.47,
+      "category": "optimizer"
+    },
+    {
+      "file": "src/analytics/analytics-engine.ts",
+      "lines": 92.5,
+      "functions": 100,
+      "branches": 87.32,
+      "category": "analytics"
+    },
+    {
+      "file": "src/orchestrators/tool-orchestrator.ts",
+      "lines": 92.59,
+      "functions": 81.81,
+      "branches": 70.58,
+      "category": "orchestrator"
+    },
+    {
+      "file": "src/streaming/streaming-handler.ts",
+      "lines": 90.24,
+      "functions": 100,
+      "branches": 75.6,
+      "category": "streaming"
+    },
+    {
+      "file": "src/accounts/kiro-mitm-client.ts",
+      "lines": 88.88,
+      "functions": 100,
+      "branches": 78.57,
+      "category": "accounts"
+    },
+    {
+      "file": "src/optimizers/semantic-deduplication.ts",
+      "lines": 85,
+      "functions": 100,
+      "branches": 56.25,
+      "category": "optimizer"
+    },
+    {
+      "file": "src/optimizers/request-classifier.ts",
+      "lines": 84.93,
+      "functions": 100,
+      "branches": 77.08,
+      "category": "optimizer"
+    },
+    {
+      "file": "src/accounts/account-pool-manager.ts",
+      "lines": 83.49,
+      "functions": 95.45,
+      "branches": 63.33,
+      "category": "accounts"
+    },
+    {
+      "file": "src/accounts/kiro-auth-manager.ts",
+      "lines": 82.6,
+      "functions": 94.73,
+      "branches": 65,
+      "category": "accounts"
+    }
+  ],
+  "categoryBreakdown": {
+    "optimizers": {
+      "avgLines": 91.53,
+      "avgFunctions": 100,
+      "avgBranches": 79.73,
+      "status": "excellent"
+    },
+    "accounts": {
+      "avgLines": 84.99,
+      "avgFunctions": 96.72,
+      "avgBranches": 68.96,
+      "status": "good"
+    },
+    "analytics": {
+      "avgLines": 92.5,
+      "avgFunctions": 100,
+      "avgBranches": 87.32,
+      "status": "excellent"
+    },
+    "streaming": {
+      "avgLines": 90.24,
+      "avgFunctions": 100,
+      "avgBranches": 75.6,
+      "status": "excellent"
+    },
+    "orchestrators": {
+      "avgLines": 92.59,
+      "avgFunctions": 81.81,
+      "avgBranches": 70.58,
+      "status": "excellent"
+    },
+    "parsers": {
+      "avgLines": 65.35,
+      "avgFunctions": 76.41,
+      "avgBranches": 46.58,
+      "status": "moderate"
+    },
+    "server": {
+      "avgLines": 63.67,
+      "avgFunctions": 67.3,
+      "avgBranches": 17.34,
+      "status": "moderate"
+    },
+    "infrastructure": {
+      "avgLines": 18.4,
+      "avgFunctions": 0,
+      "avgBranches": 0,
+      "status": "poor"
+    },
+    "cli": {
+      "avgLines": 0,
+      "avgFunctions": 0,
+      "avgBranches": 0,
+      "status": "untested"
+    },
+    "config": {
+      "avgLines": 0,
+      "avgFunctions": 50,
+      "avgBranches": 50,
+      "status": "untested"
+    }
+  },
+  "testFailures": [
+    {
+      "suite": "src/cli/services/__tests__/health-service.test.ts",
+      "reason": "TypeScript compilation errors - missing exports",
+      "impact": "Test suite cannot run",
+      "priority": "critical"
+    }
+  ]
+}

@@ -1,0 +1,225 @@
+{
+  "summary": {
+    "totalFiles": 82,
+    "totalLines": 24754,
+    "totalTokens": 190586,
+    "clonesFound": 131,
+    "duplicatedLines": 2141,
+    "duplicatedTokens": 17778,
+    "duplicationPercentage": {
+      "lines": 8.65,
+      "tokens": 9.33
+    }
+  },
+  "duplicatedBlocks": [
+    {
+      "id": 1,
+      "file": "src/server/__tests__/routes.test.ts",
+      "lines": "152:65 - 198:46",
+      "size": 46,
+      "tokens": 480,
+      "duplicates": [
+        "325:42 - 371:41",
+        "427:50 - 474:12",
+        "555:39 - 601:26",
+        "664:44 - 725:39"
+      ],
+      "category": "test",
+      "severity": "high"
+    },
+    {
+      "id": 2,
+      "file": "src/server/__tests__/monitoring.test.ts",
+      "lines": "131:43 - 170:2",
+      "size": 39,
+      "tokens": 280,
+      "duplicates": [
+        "471:52 - 510:6"
+      ],
+      "category": "test",
+      "severity": "high"
+    },
+    {
+      "id": 3,
+      "file": "src/server/__tests__/monitoring.test.ts",
+      "lines": "201:12 - 236:79",
+      "size": 35,
+      "tokens": 240,
+      "duplicates": [
+        "363:7 - 398:36"
+      ],
+      "category": "test",
+      "severity": "high"
+    },
+    {
+      "id": 4,
+      "file": "src/accounts/__tests__/kiro-auth-manager.test.ts",
+      "lines": "200:46 - 235:10",
+      "size": 35,
+      "tokens": 271,
+      "duplicates": [
+        "325:61 - 360:10",
+        "369:61 - 404:10",
+        "420:41 - 455:32"
+      ],
+      "category": "test",
+      "severity": "high"
+    },
+    {
+      "id": 5,
+      "file": "src/cli/commands/account.ts",
+      "lines": "32:40 - 68:7",
+      "size": 36,
+      "tokens": 275,
+      "duplicates": [
+        "src/cli/commands/login.ts:155:50 - 191:21"
+      ],
+      "category": "production",
+      "severity": "critical"
+    },
+    {
+      "id": 6,
+      "file": "src/parsers/request-parser.ts",
+      "lines": "427:4 - 464:28",
+      "size": 37,
+      "tokens": 260,
+      "duplicates": [
+        "src/parsers/response-parser.ts:316:5 - 353:26"
+      ],
+      "category": "production",
+      "severity": "critical"
+    },
+    {
+      "id": 7,
+      "file": "src/parsers/request-parser.ts",
+      "lines": "327:5 - 357:8",
+      "size": 30,
+      "tokens": 216,
+      "duplicates": [
+        "src/parsers/response-parser.ts:256:2 - 286:11"
+      ],
+      "category": "production",
+      "severity": "high"
+    },
+    {
+      "id": 8,
+      "file": "src/streaming/__tests__/streaming-handler.test.ts",
+      "lines": "389:2 - 419:51",
+      "size": 30,
+      "tokens": 231,
+      "duplicates": [
+        "283:2 - 315:73"
+      ],
+      "category": "test",
+      "severity": "medium"
+    }
+  ],
+  "filesByDuplication": [
+    {
+      "file": "src/server/__tests__/routes.test.ts",
+      "duplicatedLines": 280,
+      "clonesCount": 8,
+      "severity": "high"
+    },
+    {
+      "file": "src/server/__tests__/monitoring.test.ts",
+      "duplicatedLines": 265,
+      "clonesCount": 15,
+      "severity": "high"
+    },
+    {
+      "file": "src/accounts/__tests__/account-pool-manager.test.ts",
+      "duplicatedLines": 245,
+      "clonesCount": 14,
+      "severity": "high"
+    },
+    {
+      "file": "src/accounts/__tests__/kiro-auth-manager.test.ts",
+      "duplicatedLines": 180,
+      "clonesCount": 6,
+      "severity": "high"
+    },
+    {
+      "file": "src/streaming/__tests__/streaming-handler.test.ts",
+      "duplicatedLines": 175,
+      "clonesCount": 12,
+      "severity": "high"
+    },
+    {
+      "file": "src/accounts/__tests__/kiro-mitm-client.test.ts",
+      "duplicatedLines": 145,
+      "clonesCount": 11,
+      "severity": "medium"
+    },
+    {
+      "file": "src/cli/bin/claudeflow.ts",
+      "duplicatedLines": 85,
+      "clonesCount": 9,
+      "severity": "medium"
+    },
+    {
+      "file": "src/optimizers/__tests__/context-optimizer.test.ts",
+      "duplicatedLines": 120,
+      "clonesCount": 9,
+      "severity": "medium"
+    },
+    {
+      "file": "src/cli/commands/account.ts",
+      "duplicatedLines": 75,
+      "clonesCount": 5,
+      "severity": "high"
+    },
+    {
+      "file": "src/parsers/request-parser.ts",
+      "duplicatedLines": 140,
+      "clonesCount": 6,
+      "severity": "critical"
+    },
+    {
+      "file": "src/parsers/response-parser.ts",
+      "duplicatedLines": 140,
+      "clonesCount": 6,
+      "severity": "critical"
+    }
+  ],
+  "categoryBreakdown": {
+    "test": {
+      "clones": 105,
+      "percentage": 80.15
+    },
+    "production": {
+      "clones": 26,
+      "percentage": 19.85
+    }
+  },
+  "recommendations": [
+    {
+      "priority": "critical",
+      "issue": "Significant duplication in parsers (request-parser.ts and response-parser.ts)",
+      "impact": "Maintenance burden, bug propagation risk",
+      "recommendation": "Extract common parsing logic into shared utility functions",
+      "effort": "medium"
+    },
+    {
+      "priority": "critical",
+      "issue": "Duplicated authentication logic between account.ts and login.ts",
+      "impact": "Inconsistent behavior, security risk",
+      "recommendation": "Create shared authentication module",
+      "effort": "medium"
+    },
+    {
+      "priority": "high",
+      "issue": "Test setup duplication across multiple test files",
+      "impact": "Test maintenance burden",
+      "recommendation": "Create shared test fixtures and setup utilities in tests/utils/",
+      "effort": "low"
+    },
+    {
+      "priority": "medium",
+      "issue": "Repeated error handling patterns in CLI commands",
+      "impact": "Inconsistent error messages",
+      "recommendation": "Create error handling utility wrapper",
+      "effort": "low"
+    }
+  ]
+}

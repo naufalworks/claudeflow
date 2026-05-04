@@ -1,0 +1,224 @@
+{
+  "metadata": {
+    "project": "ClaudeFlow",
+    "auditDate": "2026-05-03",
+    "version": "0.1.0",
+    "generatedAt": "2026-05-03T17:30:23.017Z",
+    "nodeVersion": "v20.20.0",
+    "platform": "darwin"
+  },
+  "codeMetrics": {
+    "totalFiles": 84,
+    "totalLines": 25946,
+    "totalFunctions": 1309,
+    "avgComplexity": 3.7,
+    "avgFunctionLength": 18.52,
+    "buildTime": "1.714s",
+    "gitCommit": "0ae2e7740afbd2b0c59d00efda72da5a864eb144",
+    "complexityDistribution": {
+      "low": 1254,
+      "moderate": 42,
+      "high": 6,
+      "veryHigh": 7
+    },
+    "highComplexityFunctions": 7,
+    "longFunctions": 48,
+    "deeplyNestedFunctions": 30
+  },
+  "testMetrics": {
+    "totalTests": 205,
+    "passingTests": 205,
+    "failingTests": 0,
+    "testSuites": {
+      "total": 20,
+      "passing": 15,
+      "failing": 5
+    },
+    "coverage": {
+      "lines": 25.42,
+      "statements": 25.55,
+      "functions": 30.04,
+      "branches": 23.19
+    },
+    "coverageDetails": {
+      "totalLines": 4597,
+      "coveredLines": 1169,
+      "totalFunctions": 609,
+      "coveredFunctions": 183,
+      "totalBranches": 1811,
+      "coveredBranches": 420
+    },
+    "untestedFiles": 29,
+    "lowCoverageFiles": 8,
+    "wellTestedFiles": 11,
+    "categoryBreakdown": {
+      "optimizers": {
+        "avgLines": 91.53,
+        "avgFunctions": 100,
+        "avgBranches": 79.73,
+        "status": "excellent"
+      },
+      "accounts": {
+        "avgLines": 84.99,
+        "avgFunctions": 96.72,
+        "avgBranches": 68.96,
+        "status": "good"
+      },
+      "analytics": {
+        "avgLines": 92.5,
+        "avgFunctions": 100,
+        "avgBranches": 87.32,
+        "status": "excellent"
+      },
+      "streaming": {
+        "avgLines": 90.24,
+        "avgFunctions": 100,
+        "avgBranches": 75.6,
+        "status": "excellent"
+      },
+      "orchestrators": {
+        "avgLines": 92.59,
+        "avgFunctions": 81.81,
+        "avgBranches": 70.58,
+        "status": "excellent"
+      },
+      "parsers": {
+        "avgLines": 65.35,
+        "avgFunctions": 76.41,
+        "avgBranches": 46.58,
+        "status": "moderate"
+      },
+      "server": {
+        "avgLines": 63.67,
+        "avgFunctions": 67.3,
+        "avgBranches": 17.34,
+        "status": "moderate"
+      },
+      "infrastructure": {
+        "avgLines": 18.4,
+        "avgFunctions": 0,
+        "avgBranches": 0,
+        "status": "poor"
+      },
+      "cli": {
+        "avgLines": 0,
+        "avgFunctions": 0,
+        "avgBranches": 0,
+        "status": "untested"
+      },
+      "config": {
+        "avgLines": 0,
+        "avgFunctions": 50,
+        "avgBranches": 50,
+        "status": "untested"
+      }
+    }
+  },
+  "dependencyMetrics": {
+    "totalDependencies": 0,
+    "vulnerabilities": 0,
+    "outdatedPackages": 0,
+    "unusedDependencies": 0,
+    "status": "excellent"
+  },
+  "issueMetrics": {
+    "totalIssues": 45,
+    "byPriority": {
+      "critical": 12,
+      "high": 23,
+      "medium": 10,
+      "low": 0,
+      "backlog": 0
+    },
+    "byCategory": {
+      "architecture": 5,
+      "codeQuality": 5,
+      "esModuleCompliance": 0,
+      "errorHandling": 7,
+      "testing": 5,
+      "security": 8,
+      "performance": 8,
+      "documentation": 4,
+      "configuration": 3,
+      "dependencies": 0
+    },
+    "breakingChanges": 8,
+    "quickWins": 13,
+    "complexIssues": 6,
+    "issueGroups": 12
+  },
+  "qualityMetrics": {
+    "codeQualityScore": 68,
+    "testCoverageScore": 39,
+    "securityScore": 15,
+    "performanceScore": 37,
+    "documentationScore": 68,
+    "overallScore": 53,
+    "grade": "F",
+    "status": "critical"
+  },
+  "performanceIndicators": {
+    "potentialLatencyReduction": "110-220ms per request",
+    "memoryLeakRisk": "High (streaming without cleanup)",
+    "cacheOptimizationPotential": "5-10% improvement",
+    "parallelizationOpportunities": 2,
+    "connectionPoolingNeeded": true,
+    "circuitBreakerNeeded": true
+  },
+  "securityIndicators": {
+    "criticalVulnerabilities": 3,
+    "highVulnerabilities": 5,
+    "rateLimit": false,
+    "corsConfigured": "permissive",
+    "httpsEnforced": false,
+    "authenticationOnAdmin": false,
+    "secretsInLogs": true,
+    "redisEncryption": false,
+    "inputValidation": "weak"
+  },
+  "architectureIndicators": {
+    "godObjects": 5,
+    "circularDependencies": 1,
+    "avgFileSize": 309,
+    "largestFile": 1109,
+    "moduleCoupling": "high",
+    "separationOfConcerns": "moderate"
+  },
+  "recommendations": {
+    "immediate": [
+      "Implement rate limiting on all endpoints",
+      "Fix permissive CORS configuration",
+      "Add authentication to admin endpoints",
+      "Add error handling to infrastructure initialization",
+      "Add error handling to health checks"
+    ],
+    "shortTerm": [
+      "Split server/routes.ts (1109 lines) into focused modules",
+      "Increase test coverage from 25% to 80%",
+      "Add integration tests for critical flows",
+      "Implement HTTPS enforcement",
+      "Encrypt session data in Redis"
+    ],
+    "mediumTerm": [
+      "Refactor CLI entry point (739 lines)",
+      "Implement connection pooling for external APIs",
+      "Add circuit breaker pattern",
+      "Create comprehensive documentation",
+      "Implement custom error types"
+    ],
+    "longTerm": [
+      "Optimize cache thresholds adaptively",
+      "Implement memory management in streaming",
+      "Add retry jitter to prevent thundering herd",
+      "Create ADRs for architectural decisions",
+      "Implement performance monitoring"
+    ]
+  },
+  "estimatedEffort": {
+    "criticalIssues": "5-7 days",
+    "highPriorityIssues": "10-15 days",
+    "mediumPriorityIssues": "5-7 days",
+    "totalEffort": "20-29 days",
+    "quickWins": "2-3 days"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto-Index Edited Steering Files",
+  "description": "Automatically indexes steering files into adaptive-memory when they are edited",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "~/.kiro/steering/*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A steering file was just edited. Read the modified file and call mcp_adaptive_memory_store_memory to update its index with type='context', appropriate tags from the frontmatter, and the full content. Keep this silent - don't report to user unless there's an error."
+  }
+}

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClaudeFlow Audit Score Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #f0f0f0;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #718096;
+            font-size: 1.1em;
+        }
+        
+        .overall-score {
+            text-align: center;
+            margin: 40px 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+        }
+        
+        .overall-score h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+        
+        .score-display {
+            font-size: 5em;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .grade {
+            font-size: 3em;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 30px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        .status {
+            font-size: 1.3em;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .chart-container {
+            background: #f7fafc;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-container h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .metric-card h4 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .legend {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+        }
+        
+        .legend h4 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+        
+        .legend-item {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 3px solid #f0f0f0;
+            color: #718096;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 ClaudeFlow Audit Score Report</h1>
+            <p class="subtitle">Comprehensive Code Quality Assessment</p>
+            <p class="subtitle">Audit Date: May 3, 2026</p>
+        </header>
+        
+        <div class="overall-score">
+            <h2>Overall Health Score</h2>
+            <div class="score-display">53/100</div>
+            <div class="grade">Grade: F</div>
+            <div class="status">🔴 Critical - Major issues must be resolved before deployment</div>
+        </div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h4>Total Issues</h4>
+                <div class="metric-value">45</div>
+                <div class="metric-label">Issues Found</div>
+            </div>
+            <div class="metric-card">
+                <h4>Critical Issues</h4>
+                <div class="metric-value">12</div>
+                <div class="metric-label">Require Immediate Action</div>
+            </div>
+            <div class="metric-card">
+                <h4>High Priority</h4>
+                <div class="metric-value">23</div>
+                <div class="metric-label">Should Be Addressed Soon</div>
+            </div>
+            <div class="metric-card">
+                <h4>Quick Wins</h4>
+                <div class="metric-value">13</div>
+                <div class="metric-label">Low Effort, High Impact</div>
+            </div>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>📊 Category Scores</h3>
+                <canvas id="categoryScoresChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>🎯 Score Distribution</h3>
+                <canvas id="scoreDistributionChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>⚠️ Issues by Priority</h3>
+                <canvas id="issuesPriorityChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>📈 Issues by Category</h3>
+                <canvas id="issuesCategoryChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <h4>Score Interpretation</h4>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #48bb78;"></span>
+                <span>90-100: Excellent (A)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #4299e1;"></span>
+                <span>80-89: Good (B)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ed8936;"></span>
+                <span>70-79: Fair (C)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #f56565;"></span>
+                <span>60-69: Poor (D)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #c53030;"></span>
+                <span>0-59: Critical (F)</span>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Generated on May 3, 2026 at 5:29 PM</p>
+            <p>ClaudeFlow Comprehensive Audit System</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Data
+        const categoryData = {
+            labels: [
+                'Architecture',
+                'Code Quality',
+                'ES Module',
+                'Error Handling',
+                'Testing',
+                'Security',
+                'Performance',
+                'Documentation',
+                'Configuration',
+                'Dependencies'
+            ],
+            scores: [54, 68, 100, 27, 39, 15, 37, 68, 88, 100],
+            issues: [5, 5, 0, 7, 5, 8, 8, 4, 3, 0]
+        };
+        
+        const issuesByPriority = {
+            critical: 12,
+            high: 23,
+            medium: 10,
+            low: 0
+        };
+        
+        // Helper function to get color based on score
+        function getScoreColor(score) {
+            if (score >= 90) return '#48bb78';
+            if (score >= 80) return '#4299e1';
+            if (score >= 70) return '#ed8936';
+            if (score >= 60) return '#f56565';
+            return '#c53030';
+        }
+        
+        // Category Scores Bar Chart
+        const ctx1 = document.getElementById('categoryScoresChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: categoryData.labels,
+                datasets: [{
+                    label: 'Score',
+                    data: categoryData.scores,
+                    backgroundColor: categoryData.scores.map(score => getScoreColor(score)),
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '/100';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Score Distribution Radar Chart
+        const ctx2 = document.getElementById('scoreDistributionChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'radar',
+            data: {
+                labels: categoryData.labels,
+                datasets: [{
+                    label: 'Current Score',
+                    data: categoryData.scores,
+                    backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(102, 126, 234, 1)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgba(102, 126, 234, 1)'
+                }, {
+                    label: 'Target (80)',
+                    data: [80, 80, 80, 80, 80, 80, 80, 80, 80, 80],
+                    backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                    borderColor: 'rgba(72, 187, 120, 0.5)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 20
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Issues by Priority Doughnut Chart
+        const ctx3 = document.getElementById('issuesPriorityChart').getContext('2d');
+        new Chart(ctx3, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                    data: [
+                        issuesByPriority.critical,
+                        issuesByPriority.high,
+                        issuesByPriority.medium,
+                        issuesByPriority.low
+                    ],
+                    backgroundColor: [
+                        '#c53030',
+                        '#f56565',
+                        '#ed8936',
+                        '#48bb78'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // Issues by Category Bar Chart
+        const ctx4 = document.getElementById('issuesCategoryChart').getContext('2d');
+        new Chart(ctx4, {
+            type: 'bar',
+            data: {
+                labels: categoryData.labels,
+                datasets: [{
+                    label: 'Issues',
+                    data: categoryData.issues,
+                    backgroundColor: '#667eea',
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

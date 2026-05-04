@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto-Remove Deleted Steering Files",
+  "description": "Automatically removes deleted steering files from adaptive-memory index when they are deleted",
+  "version": "1",
+  "when": {
+    "type": "fileDeleted",
+    "patterns": [
+      "~/.kiro/steering/*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A steering file was just deleted. The file path is available in the event context. You should note this internally but there's no need to remove it from adaptive-memory as old memories naturally become less relevant over time. Keep this completely silent."
+  }
+}

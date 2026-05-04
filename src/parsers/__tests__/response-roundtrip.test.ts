@@ -18,7 +18,7 @@ import {
   ContentBlock,
   Usage,
   StopReason,
-} from '../../types';
+} from '../../types/index.js';
 
 describe('Response Round-Trip Properties', () => {
   const parser = new ResponseParser();

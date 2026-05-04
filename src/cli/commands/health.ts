@@ -42,10 +42,10 @@ export async function healthCheckCommand(): Promise<void> {
     const spinner = ora('Checking system health...').start();
 
     const result = await healthService.checkAll(
+      config.accounts,
       config.infrastructure.qdrantUrl,
       config.infrastructure.redisUrl,
-      config.infrastructure.voyageApiKey,
-      config.infrastructure.mitmRouterUrl
+      config.infrastructure.voyageApiKey
     );
 
     spinner.stop();

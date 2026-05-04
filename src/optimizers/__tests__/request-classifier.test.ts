@@ -6,7 +6,7 @@
  */
 
 import { RequestClassifier } from '../request-classifier';
-import { AnthropicRequest } from '../../types';
+import { AnthropicRequest } from '../../types/index.js';
 import Anthropic from '@anthropic-ai/sdk';
 
 // Mock the Anthropic SDK

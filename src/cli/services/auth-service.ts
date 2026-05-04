@@ -36,20 +36,23 @@ export class AuthService {
   async initialize(): Promise<void> {
     const config = await this.configService.getConfig();
 
-    // Load accounts into KiroAuthManager
+    // Load only OAuth accounts into KiroAuthManager (deprecated, only for OAuth)
     for (const account of config.accounts) {
-      const kiroAccount: KiroAccount = {
-        id: account.id,
-        machineId: account.machineId,
-        apiKey: account.apiKey,
-        sessionToken: account.sessionToken,
-        mitmRouterUrl: account.mitmRouterUrl,
-        lastUsed: account.lastUsed ? new Date(account.lastUsed) : new Date(),
-        requestCount: account.requestCount || 0,
-        sessionExpiry: account.sessionExpiry ? new Date(account.sessionExpiry) : undefined,
-      };
+      // Only load OAuth accounts into KiroAuthManager
+      if (account.provider === 'kiro') {
+        const kiroAccount: KiroAccount = {
+          id: account.id,
+          machineId: account.kiroConfig.machineId,
+          apiKey: account.apiKey,
+          sessionToken: account.kiroConfig.sessionToken,
+          mitmRouterUrl: account.kiroConfig.mitmRouterUrl,
+          lastUsed: account.lastUsed ? new Date(account.lastUsed) : new Date(),
+          requestCount: account.requestCount || 0,
+          sessionExpiry: account.kiroConfig.sessionExpiry,
+        };
 
-      this.kiroAuthManager.addAccount(kiroAccount);
+        this.kiroAuthManager.addAccount(kiroAccount);
+      }
     }
 
     // Load combos into KiroAuthManager
@@ -60,8 +63,10 @@ export class AuthService {
     // Initialize combo states from Redis
     await this.kiroAuthManager.initializeCombosFromRedis();
 
+    const oauthAccountCount = config.accounts.filter(a => a.provider === 'kiro').length;
     logger.info('AuthService initialized', {
-      accountCount: config.accounts.length,
+      totalAccounts: config.accounts.length,
+      oauthAccounts: oauthAccountCount,
       comboCount: config.combos.length,
     });
   }
@@ -115,11 +120,14 @@ export class AuthService {
     try {
       const session = await this.kiroAuthManager.refreshSession(accountId);
 
-      // Update config with new session token and expiry
-      await this.configService.updateAccount(accountId, {
-        sessionToken: session.sessionToken,
-        sessionExpiry: session.expiresAt.getTime(),
-      });
+      // Update config with new session token and expiry for OAuth account
+      const account = await this.configService.getAccount(accountId);
+      if (account && account.provider === 'kiro') {
+        account.kiroConfig.sessionToken = session.sessionToken;
+        account.kiroConfig.sessionExpiry = session.expiresAt;
+        account.lastUsed = Date.now();
+        await this.configService.updateAccount(accountId, account);
+      }
 
       logger.info('Session refresh successful', {
         accountId: session.accountId,

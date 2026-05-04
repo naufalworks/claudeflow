@@ -115,14 +115,17 @@ export async function setupCommand(): Promise<void> {
 
       spinner.succeed('Authentication successful');
 
-      // Add account to config
+      // Add account to config (OAuth/Kiro account type)
       await configService.addAccount({
         id: `account-${Date.now()}`,
-        machineId: accountAnswers.machineId,
+        provider: 'kiro',
         apiKey: accountAnswers.apiKey,
-        sessionToken: session.sessionToken,
-        sessionExpiry: session.expiresAt.getTime(),
-        mitmRouterUrl: accountAnswers.mitmRouterUrl,
+        kiroConfig: {
+          machineId: accountAnswers.machineId,
+          mitmRouterUrl: accountAnswers.mitmRouterUrl,
+          sessionToken: session.sessionToken,
+          sessionExpiry: session.expiresAt,
+        },
         lastUsed: Date.now(),
         requestCount: 0,
       });
@@ -196,10 +199,10 @@ export async function setupCommand(): Promise<void> {
 
     try {
       const healthResult = await healthService.checkAll(
+        healthConfig.accounts,
         healthConfig.infrastructure.qdrantUrl,
         healthConfig.infrastructure.redisUrl,
-        healthConfig.infrastructure.voyageApiKey,
-        healthConfig.infrastructure.mitmRouterUrl
+        healthConfig.infrastructure.voyageApiKey
       );
 
       healthSpinner.stop();

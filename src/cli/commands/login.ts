@@ -11,7 +11,8 @@ import { ConfigService } from '../services/config-service.js';
 import { AuthService } from '../services/auth-service.js';
 import { RedisClientWrapper } from '../../infrastructure/redis.js';
 import { logger } from '../utils/logger.js';
-import type { LoginOptions, Credentials, KiroAccountConfig } from '../types/cli.types.js';
+import type { LoginOptions, Credentials } from '../types/cli.types.js';
+import type { OAuthAccount } from '../../config/schema.js';
 
 /**
  * Login command handler
@@ -68,31 +69,34 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
       const accountId = `kiro-${credentials.machineId}`;
 
       // Check if account already exists
-      const existingAccount = await configService.getAccount(accountId);
+      const existingAccount = config.accounts.find(a => a.id === accountId);
 
-      if (existingAccount) {
-        // Update existing account
-        await configService.updateAccount(accountId, {
-          sessionToken: session.sessionToken,
-          sessionExpiry: session.expiresAt.getTime(),
-          lastUsed: Date.now(),
-        });
+      if (existingAccount && existingAccount.provider === 'kiro') {
+        // Update existing OAuth account
+        existingAccount.kiroConfig.sessionToken = session.sessionToken;
+        existingAccount.kiroConfig.sessionExpiry = session.expiresAt;
+        existingAccount.lastUsed = Date.now();
+        await configService.save(config);
 
         console.log(chalk.green('\n✓ Account updated successfully!'));
       } else {
-        // Add new account
-        const newAccount: KiroAccountConfig = {
+        // Add new OAuth account
+        const newAccount: OAuthAccount = {
           id: accountId,
-          machineId: credentials.machineId,
+          provider: 'kiro',
           apiKey: credentials.apiKey,
-          sessionToken: session.sessionToken,
-          sessionExpiry: session.expiresAt.getTime(),
-          mitmRouterUrl: credentials.mitmRouterUrl || config.infrastructure.mitmRouterUrl,
+          kiroConfig: {
+            machineId: credentials.machineId,
+            mitmRouterUrl: credentials.mitmRouterUrl || config.infrastructure.mitmRouterUrl,
+            sessionToken: session.sessionToken,
+            sessionExpiry: session.expiresAt,
+          },
           lastUsed: Date.now(),
           requestCount: 0,
         };
 
-        await configService.addAccount(newAccount);
+        config.accounts.push(newAccount);
+        await configService.save(config);
 
         console.log(chalk.green('\n✓ Account added successfully!'));
       }

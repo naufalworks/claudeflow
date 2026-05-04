@@ -9,9 +9,9 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { z } from 'zod';
+import type { Account } from '../../config/schema.js';
 import type {
   CLIConfig,
-  KiroAccountConfig,
   KiroComboConfig,
   ValidationResult,
 } from '../types/cli.types.js';
@@ -19,16 +19,40 @@ import type {
 /**
  * Configuration Schema for validation
  */
-const KiroAccountConfigSchema = z.object({
+const AnthropicAccountConfigSchema = z.object({
   id: z.string(),
-  machineId: z.string(),
+  provider: z.literal('anthropic'),
   apiKey: z.string(),
-  sessionToken: z.string().optional(),
-  sessionExpiry: z.number().optional(),
-  mitmRouterUrl: z.string().url(),
-  lastUsed: z.number().optional(),
-  requestCount: z.number().optional(),
 });
+
+const ProxyAccountConfigSchema = z.object({
+  id: z.string(),
+  provider: z.literal('proxy'),
+  apiKey: z.string(),
+  baseURL: z.string().url(),
+});
+
+const OAuthAccountConfigSchema = z.object({
+  id: z.string(),
+  provider: z.literal('kiro'),
+  apiKey: z.string(),
+  kiroConfig: z.object({
+    machineId: z.string(),
+    mitmRouterUrl: z.string().url(),
+    sessionToken: z.string().optional(),
+    sessionExpiry: z.date().optional(),
+    combo: z.object({
+      accounts: z.array(z.string()),
+      strategy: z.enum(['round-robin', 'sticky-round-robin']),
+    }).optional(),
+  }),
+});
+
+const AccountConfigSchema = z.discriminatedUnion('provider', [
+  AnthropicAccountConfigSchema,
+  ProxyAccountConfigSchema,
+  OAuthAccountConfigSchema,
+]);
 
 const KiroComboConfigSchema = z.object({
   name: z.string(),
@@ -60,7 +84,7 @@ const PreferencesConfigSchema = z.object({
 const CLIConfigSchema = z.object({
   version: z.string(),
   activeProfile: z.string(),
-  accounts: z.array(KiroAccountConfigSchema),
+  accounts: z.array(AccountConfigSchema),
   combos: z.array(KiroComboConfigSchema),
   infrastructure: InfrastructureConfigSchema,
   daemon: DaemonConfigSchema,
@@ -307,7 +331,7 @@ export class ConfigService {
   /**
    * Add account to configuration
    */
-  async addAccount(account: KiroAccountConfig): Promise<void> {
+  async addAccount(account: Account): Promise<void> {
     const config = await this.getConfig();
 
     // Check if account ID already exists
@@ -343,7 +367,7 @@ export class ConfigService {
   /**
    * Update account in configuration
    */
-  async updateAccount(accountId: string, updates: Partial<KiroAccountConfig>): Promise<void> {
+  async updateAccount(accountId: string, updates: Partial<Account>): Promise<void> {
     const config = await this.getConfig();
 
     const account = config.accounts.find((a) => a.id === accountId);
@@ -358,7 +382,7 @@ export class ConfigService {
   /**
    * Get account by ID
    */
-  async getAccount(accountId: string): Promise<KiroAccountConfig | undefined> {
+  async getAccount(accountId: string): Promise<Account | undefined> {
     const config = await this.getConfig();
     return config.accounts.find((a) => a.id === accountId);
   }

@@ -11,7 +11,7 @@ import {
   ContentBlock,
   SystemBlock,
   isStringContent,
-} from '../types';
+} from '../types/index.js';
 
 /**
  * Request Formatter class

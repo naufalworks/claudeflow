@@ -207,14 +207,25 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
       if (!account.id) {
         errors.push(`accounts[${index}].id: is required`);
       }
-      if (!account.machineId) {
-        errors.push(`accounts[${index}].machineId: is required`);
+      if (!account.provider) {
+        errors.push(`accounts[${index}].provider: is required`);
       }
       if (!account.apiKey) {
         errors.push(`accounts[${index}].apiKey: is required`);
       }
-      if (!account.mitmRouterUrl) {
-        errors.push(`accounts[${index}].mitmRouterUrl: is required`);
+      
+      // Validate provider-specific fields
+      if (account.provider === 'kiro') {
+        if (!account.kiroConfig?.machineId) {
+          errors.push(`accounts[${index}].kiroConfig.machineId: is required for OAuth accounts`);
+        }
+        if (!account.kiroConfig?.mitmRouterUrl) {
+          errors.push(`accounts[${index}].kiroConfig.mitmRouterUrl: is required for OAuth accounts`);
+        }
+      } else if (account.provider === 'proxy') {
+        if (!account.baseURL) {
+          errors.push(`accounts[${index}].baseURL: is required for proxy accounts`);
+        }
       }
     });
   }
@@ -246,9 +257,6 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
     }
     if (!infra.redisUrl) {
       errors.push('infrastructure.redisUrl: is required');
-    }
-    if (!infra.mitmRouterUrl) {
-      errors.push('infrastructure.mitmRouterUrl: is required');
     }
   }
 

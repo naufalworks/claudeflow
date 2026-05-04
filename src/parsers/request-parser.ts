@@ -17,7 +17,7 @@ import {
   SystemBlock,
   RequestMetadata,
   isContentBlockArray,
-} from '../types';
+} from '../types/index.js';
 
 /**
  * Result type for parser operations

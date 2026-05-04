@@ -4,13 +4,15 @@
  * Core type definitions for ClaudeFlow CLI Tool
  */
 
+import type { Account } from '../../config/schema.js';
+
 /**
  * CLI Configuration
  */
 export interface CLIConfig {
   version: string;
   activeProfile: string;
-  accounts: KiroAccountConfig[];
+  accounts: Account[];
   combos: KiroComboConfig[];
   infrastructure: InfrastructureConfig;
   daemon: DaemonConfig;

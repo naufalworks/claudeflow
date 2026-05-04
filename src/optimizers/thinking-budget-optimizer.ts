@@ -5,7 +5,7 @@
  * Uses RequestClassification to determine appropriate budget.
  */
 
-import { AnthropicRequest } from '../types';
+import { AnthropicRequest } from '../types/index.js';
 import { RequestClassification } from './request-classifier';
 
 /**

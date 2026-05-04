@@ -20,7 +20,7 @@ import {
   MessageStopChunk,
   PingChunk,
   ErrorChunk,
-} from '../types';
+} from '../types/index.js';
 import { Result, ParseError } from './request-parser';
 
 /**

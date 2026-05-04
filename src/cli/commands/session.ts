@@ -1,7 +1,7 @@
 /**
  * Session Command
  * 
- * Display session status for all accounts
+ * Display session status for all OAuth accounts
  */
 
 import chalk from 'chalk';
@@ -23,9 +23,12 @@ export async function sessionStatusCommand(): Promise<void> {
 
     const config = await configService.getConfig();
 
-    if (config.accounts.length === 0) {
-      console.log(chalk.yellow('\n⚠ No accounts configured'));
-      console.log(chalk.gray('Add an account with: claudeflow account add'));
+    // Filter only OAuth accounts
+    const oauthAccounts = config.accounts.filter(a => a.provider === 'kiro');
+
+    if (oauthAccounts.length === 0) {
+      console.log(chalk.yellow('\n⚠ No OAuth accounts configured'));
+      console.log(chalk.gray('Add an OAuth account with: claudeflow login'));
       return;
     }
 
@@ -45,22 +48,22 @@ export async function sessionStatusCommand(): Promise<void> {
     const now = Date.now();
     const REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
-    for (const account of config.accounts) {
+    for (const account of oauthAccounts) {
       let sessionStatus: string;
       let expiresText: string;
       let needsRefresh: string;
 
-      if (!account.sessionToken) {
+      if (!account.kiroConfig.sessionToken) {
         sessionStatus = chalk.red('No Session');
         expiresText = chalk.gray('N/A');
         needsRefresh = chalk.red('Yes');
-      } else if (!account.sessionExpiry) {
+      } else if (!account.kiroConfig.sessionExpiry) {
         sessionStatus = chalk.yellow('Unknown');
         expiresText = chalk.gray('Unknown');
         needsRefresh = chalk.yellow('Unknown');
       } else {
-        const expiresAt = new Date(account.sessionExpiry);
-        const timeUntilExpiry = account.sessionExpiry - now;
+        const expiresAt = new Date(account.kiroConfig.sessionExpiry);
+        const timeUntilExpiry = expiresAt.getTime() - now;
 
         if (timeUntilExpiry <= 0) {
           sessionStatus = chalk.red('Expired');
@@ -79,7 +82,7 @@ export async function sessionStatusCommand(): Promise<void> {
 
       table.push([
         account.id,
-        account.machineId,
+        account.kiroConfig.machineId,
         sessionStatus,
         expiresText,
         needsRefresh,
@@ -89,29 +92,31 @@ export async function sessionStatusCommand(): Promise<void> {
     console.log(table.toString());
 
     // Summary
-    const expiredCount = config.accounts.filter(
-      (a) => a.sessionExpiry && a.sessionExpiry <= now
+    const expiredCount = oauthAccounts.filter(
+      (a) => a.kiroConfig.sessionExpiry && new Date(a.kiroConfig.sessionExpiry).getTime() <= now
     ).length;
 
-    const expiringSoonCount = config.accounts.filter(
-      (a) =>
-        a.sessionExpiry &&
-        a.sessionExpiry > now &&
-        a.sessionExpiry - now <= REFRESH_THRESHOLD_MS
+    const expiringSoonCount = oauthAccounts.filter(
+      (a) => {
+        if (!a.kiroConfig.sessionExpiry) return false;
+        const expiryTime = new Date(a.kiroConfig.sessionExpiry).getTime();
+        return expiryTime > now && expiryTime - now <= REFRESH_THRESHOLD_MS;
+      }
     ).length;
 
-    const activeCount = config.accounts.filter(
-      (a) =>
-        a.sessionExpiry &&
-        a.sessionExpiry > now &&
-        a.sessionExpiry - now > REFRESH_THRESHOLD_MS
+    const activeCount = oauthAccounts.filter(
+      (a) => {
+        if (!a.kiroConfig.sessionExpiry) return false;
+        const expiryTime = new Date(a.kiroConfig.sessionExpiry).getTime();
+        return expiryTime > now && expiryTime - now > REFRESH_THRESHOLD_MS;
+      }
     ).length;
 
     console.log(chalk.gray('\nSummary:'));
     console.log(chalk.green(`  Active: ${activeCount}`));
     console.log(chalk.yellow(`  Expiring Soon: ${expiringSoonCount}`));
     console.log(chalk.red(`  Expired: ${expiredCount}`));
-    console.log(chalk.gray(`  Total: ${config.accounts.length}`));
+    console.log(chalk.gray(`  Total: ${oauthAccounts.length}`));
 
     if (expiredCount > 0 || expiringSoonCount > 0) {
       console.log(chalk.yellow('\n⚠ Some sessions need refresh'));

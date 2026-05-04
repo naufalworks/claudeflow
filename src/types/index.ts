@@ -5,4 +5,4 @@
  */
 
 // Anthropic API types
-export * from './anthropic.types';
+export * from './anthropic.types.js';

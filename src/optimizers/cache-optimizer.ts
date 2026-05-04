@@ -5,7 +5,7 @@
  * Anthropic prompt caching effectiveness.
  */
 
-import { AnthropicRequest, Message, ContentBlock } from '../types';
+import { AnthropicRequest, Message, ContentBlock } from '../types/index.js';
 
 /**
  * Cache analysis result

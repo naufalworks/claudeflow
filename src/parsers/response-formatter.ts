@@ -9,7 +9,7 @@ import {
   AnthropicResponse,
   ContentBlock,
   Usage,
-} from '../types';
+} from '../types/index.js';
 
 /**
  * Response Formatter class

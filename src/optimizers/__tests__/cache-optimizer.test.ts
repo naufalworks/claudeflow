@@ -5,7 +5,7 @@
  */
 
 import { CacheOptimizer } from '../cache-optimizer';
-import { AnthropicRequest, Message } from '../../types';
+import { AnthropicRequest, Message } from '../../types/index.js';
 
 describe('CacheOptimizer', () => {
   let optimizer: CacheOptimizer;

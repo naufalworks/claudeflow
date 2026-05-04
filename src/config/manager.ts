@@ -89,7 +89,26 @@ export class ConfigurationManager {
       accountIndex++;
     }
     
-    // Load Kiro accounts
+    // Load Proxy accounts (for Anthropic-compatible proxies)
+    // IMPORTANT: Proxy MUST forward raw Anthropic format unchanged (NOT 9router)
+    let proxyIndex = 1;
+    while (process.env[`PROXY_API_KEY_${proxyIndex}`]) {
+      const apiKey = process.env[`PROXY_API_KEY_${proxyIndex}`];
+      const baseURL = process.env[`PROXY_BASE_URL_${proxyIndex}`];
+      
+      if (apiKey && baseURL) {
+        accounts.push({
+          id: `proxy-account-${proxyIndex}`,
+          apiKey: apiKey,
+          provider: 'proxy' as const,
+          baseURL: baseURL,
+        });
+      }
+      
+      proxyIndex++;
+    }
+    
+    // Load Kiro accounts (OAuth-based, backward compatibility)
     let kiroIndex = 1;
     while (process.env[`KIRO_MACHINE_ID_${kiroIndex}`]) {
       const machineId = process.env[`KIRO_MACHINE_ID_${kiroIndex}`];

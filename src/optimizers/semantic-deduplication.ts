@@ -8,7 +8,7 @@
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { Redis } from 'ioredis';
 import axios from 'axios';
-import { AnthropicRequest, AnthropicResponse } from '../types';
+import { AnthropicRequest, AnthropicResponse } from '../types/index.js';
 import { createHash } from 'crypto';
 
 /**

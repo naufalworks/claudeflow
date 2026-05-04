@@ -6,7 +6,7 @@
  */
 
 import { SemanticDeduplicationEngine } from '../semantic-deduplication';
-import { AnthropicRequest, AnthropicResponse } from '../../types';
+import { AnthropicRequest, AnthropicResponse } from '../../types/index.js';
 import axios from 'axios';
 
 // Create mock functions

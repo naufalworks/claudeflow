@@ -57,10 +57,15 @@ export async function comboCreateCommand(): Promise<void> {
         type: 'checkbox',
         name: 'accounts',
         message: 'Select accounts to include:',
-        choices: config.accounts.map((account) => ({
-          name: `${account.id} (${account.machineId})`,
-          value: account.id,
-        })),
+        choices: config.accounts.map((account) => {
+          const displayName = account.provider === 'kiro' 
+            ? `${account.id} (${account.kiroConfig.machineId})`
+            : `${account.id} (${account.provider})`;
+          return {
+            name: displayName,
+            value: account.id,
+          };
+        }),
         validate: (input: string[]) => {
           if (input.length === 0) {
             return 'Select at least one account';
@@ -206,9 +211,16 @@ export async function comboShowCommand(comboName: string): Promise<void> {
       const account = config.accounts.find((a) => a.id === accountId);
       const isCurrent = index === combo.currentIndex;
       const marker = isCurrent ? chalk.green('→') : ' ';
-      const accountInfo = account
-        ? `${accountId} (${account.machineId})`
-        : `${accountId} ${chalk.red('(not found)')}`;
+      let accountInfo: string;
+      if (account) {
+        if (account.provider === 'kiro') {
+          accountInfo = `${accountId} (${account.kiroConfig.machineId})`;
+        } else {
+          accountInfo = `${accountId} (${account.provider})`;
+        }
+      } else {
+        accountInfo = `${accountId} ${chalk.red('(not found)')}`;
+      }
       console.log(`  ${marker} ${index + 1}. ${accountInfo}`);
     });
 

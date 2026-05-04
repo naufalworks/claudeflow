@@ -1,6 +1,14 @@
 /**
  * KiroAuthManager
  * 
+ * @deprecated This class is deprecated and kept for backward compatibility only.
+ * Use AuthManager with OAuthAuthStrategy instead for new code.
+ * 
+ * Migration path:
+ * - Replace KiroAuthManager with AuthManager from src/auth/AuthManager
+ * - Use OAuthAuthStrategy for OAuth-based authentication
+ * - Use AccountPoolManager for account selection and routing
+ * 
  * Manages Kiro OAuth authentication and account pooling.
  * Handles session management, account rotation, and combo strategies.
  */
@@ -71,6 +79,7 @@ export class KiroAuthManager {
   /**
    * Add Kiro account to the manager
    * 
+   * @deprecated Use AuthManager with OAuthAuthStrategy instead
    * @param account - Kiro account to add
    */
   addAccount(account: KiroAccount): void {
@@ -80,6 +89,7 @@ export class KiroAuthManager {
   /**
    * Add Kiro combo configuration
    * 
+   * @deprecated Use AuthManager with OAuthAuthStrategy instead
    * @param combo - Kiro combo configuration
    */
   addCombo(combo: KiroCombo): void {
@@ -89,6 +99,7 @@ export class KiroAuthManager {
   /**
    * Authenticate Kiro account and obtain session
    * 
+   * @deprecated Use AuthManager.authenticate() with OAuthAuthStrategy instead
    * @param machineId - Machine ID for authentication
    * @param apiKey - API key for authentication
    * @param mitmRouterUrl - MITM router URL
@@ -137,6 +148,7 @@ export class KiroAuthManager {
   /**
    * Refresh expired Kiro session
    * 
+   * @deprecated Use AuthManager.refreshSession() with OAuthAuthStrategy instead
    * @param accountId - Account ID to refresh
    * @returns Refreshed Kiro session
    */
@@ -188,6 +200,7 @@ export class KiroAuthManager {
   /**
    * Select account from combo using configured strategy
    * 
+   * @deprecated Use AccountPoolManager.selectAccount() instead
    * @param comboName - Combo name
    * @param stickyKey - Sticky key for sticky-round-robin strategy (optional)
    * @returns Selected Kiro account
@@ -247,6 +260,7 @@ export class KiroAuthManager {
   /**
    * Rotate to next account in combo
    * 
+   * @deprecated Use AccountPoolManager.selectAccount() instead
    * @param currentAccountId - Current account ID
    * @param comboName - Combo name
    * @returns Next Kiro account
@@ -409,6 +423,7 @@ export class KiroAuthManager {
   /**
    * Get account by ID
    * 
+   * @deprecated Use AccountPoolManager.getAccount() instead
    * @param accountId - Account ID
    * @returns Kiro account or undefined
    */
@@ -419,6 +434,7 @@ export class KiroAuthManager {
   /**
    * Get all accounts
    * 
+   * @deprecated Use AccountPoolManager.getAccounts() instead
    * @returns Array of Kiro accounts
    */
   getAccounts(): KiroAccount[] {
@@ -428,6 +444,7 @@ export class KiroAuthManager {
   /**
    * Get combo by name
    * 
+   * @deprecated Combo functionality is deprecated
    * @param comboName - Combo name
    * @returns Kiro combo or undefined
    */
@@ -438,6 +455,7 @@ export class KiroAuthManager {
   /**
    * Get all combos
    * 
+   * @deprecated Combo functionality is deprecated
    * @returns Array of Kiro combos
    */
   getCombos(): KiroCombo[] {
@@ -447,6 +465,7 @@ export class KiroAuthManager {
   /**
    * Initialize combos from Redis
    * 
+   * @deprecated Combo functionality is deprecated
    * Load combo states from Redis to restore round-robin indices
    */
   async initializeCombosFromRedis(): Promise<void> {

@@ -6,7 +6,7 @@
 
 import { ThinkingBudgetOptimizer } from '../thinking-budget-optimizer';
 import { RequestClassification } from '../request-classifier';
-import { AnthropicRequest } from '../../types';
+import { AnthropicRequest } from '../../types/index.js';
 
 describe('ThinkingBudgetOptimizer', () => {
   let optimizer: ThinkingBudgetOptimizer;

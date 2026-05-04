@@ -13,14 +13,18 @@ async function main() {
     const config = await configManager.loadConfig();
 
     // Initialize infrastructure
+    // Find first Anthropic or Proxy account for infrastructure initialization
+    const firstAccount = config.accounts[0];
+    const anthropicConfig = {
+      apiKey: firstAccount.apiKey,
+      baseURL: firstAccount.provider === 'proxy' ? firstAccount.baseURL : undefined,
+    };
+    
     const infrastructure = await initializeInfrastructure({
       qdrant: config.infrastructure.qdrant,
       redis: config.infrastructure.redis,
       voyage: config.infrastructure.voyage,
-      anthropic: {
-        apiKey: config.accounts[0].apiKey,
-        baseURL: config.accounts[0].baseURL,
-      },
+      anthropic: anthropicConfig,
     });
 
     // Initialize CLI AuthService for session refresh worker

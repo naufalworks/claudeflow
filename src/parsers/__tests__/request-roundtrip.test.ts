@@ -11,7 +11,7 @@
 import * as fc from 'fast-check';
 import { RequestParser } from '../request-parser';
 import { RequestFormatter } from '../request-formatter';
-import { AnthropicRequest, ContentBlock, Message } from '../../types';
+import { AnthropicRequest, ContentBlock, Message } from '../../types/index.js';
 
 describe('Request Round-Trip Property Tests', () => {
   const parser = new RequestParser();

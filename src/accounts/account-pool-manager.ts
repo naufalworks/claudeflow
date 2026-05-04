@@ -3,35 +3,32 @@
  * 
  * Manages a pool of Anthropic API accounts with intelligent selection
  * based on quota availability, performance, and cost efficiency.
- * Prioritizes Kiro accounts (free) over paid accounts.
+ * 
+ * Supports three account types:
+ * - Direct Anthropic (provider: 'anthropic')
+ * - Anthropic-compatible proxies (provider: 'proxy')
+ * - OAuth routers (provider: 'kiro')
+ * 
+ * CRITICAL: All account types MUST return raw Anthropic format.
  */
 
 import type { RedisClientWrapper } from '../infrastructure/redis';
+import type { Account } from '../config/schema';
+import type { AnthropicRequest, AnthropicResponse } from '../types/anthropic.types';
+import { AuthManager } from '../auth/AuthManager.js';
+import { AnthropicClient } from '../clients/AnthropicClient.js';
+import { ProxyClient } from '../clients/ProxyClient.js';
+import { OAuthClient } from '../clients/OAuthClient.js';
+import { ResponseFormatValidator } from '../clients/ResponseFormatValidator.js';
 
 /**
- * Account interface
+ * Pool account - wraps config Account with runtime fields
  */
-export interface Account {
-  id: string;
-  apiKey: string;
-  provider: 'anthropic' | 'kiro';
+export type PoolAccount = Account & {
   quota: AccountQuota;
   performance: AccountPerformance;
   costEfficiency: number; // 0-1, where 1 is most efficient (free)
-  kiroConfig?: KiroAccountConfig; // Kiro-specific configuration
-}
-
-/**
- * Kiro account configuration
- */
-export interface KiroAccountConfig {
-  id: string;
-  machineId: string;
-  apiKey: string;
-  mitmRouterUrl: string;
-  sessionToken?: string;
-  sessionExpiry?: number;
-}
+};
 
 /**
  * Account quota information
@@ -57,7 +54,7 @@ export interface AccountPerformance {
  * Account selection result
  */
 export interface AccountSelectionResult {
-  account: Account;
+  account: PoolAccount;
   score: number;
   reason: string;
 }
@@ -66,14 +63,26 @@ export interface AccountSelectionResult {
  * AccountPoolManager class
  */
 export class AccountPoolManager {
-  private accounts: Map<string, Account>;
+  private accounts: Map<string, PoolAccount>;
   private redisClient: RedisClientWrapper;
   private config: any;
+  private authManager: AuthManager;
+  private anthropicClient: AnthropicClient;
+  private proxyClient: ProxyClient;
+  private oauthClient: OAuthClient;
+  private responseValidator: ResponseFormatValidator;
 
   constructor(redisClient: RedisClientWrapper, config: any) {
     this.accounts = new Map();
     this.redisClient = redisClient;
     this.config = config;
+    
+    // Initialize clients
+    this.authManager = new AuthManager();
+    this.anthropicClient = new AnthropicClient();
+    this.proxyClient = new ProxyClient();
+    this.oauthClient = new OAuthClient();
+    this.responseValidator = new ResponseFormatValidator();
     
     // Initialize accounts from configuration
     this.initializeAccounts();
@@ -83,17 +92,16 @@ export class AccountPoolManager {
    * Initialize accounts from configuration
    */
   private initializeAccounts(): void {
-    // Add regular Anthropic accounts
+    // Load all accounts from unified accounts array
     if (this.config.accounts) {
       for (const accountConfig of this.config.accounts) {
-        const account: Account = {
-          id: accountConfig.id,
-          apiKey: accountConfig.apiKey,
-          provider: 'anthropic',
+        // Create pool account with runtime fields based on provider type
+        const poolAccount: PoolAccount = {
+          ...accountConfig,
           quota: {
-            requestsPerMinute: accountConfig.quota?.requestsPerMinute || 50,
+            requestsPerMinute: accountConfig.provider === 'kiro' ? 1000 : 50,
             requestsPerMinuteUsed: 0,
-            tokensPerDay: accountConfig.quota?.tokensPerDay || 100000,
+            tokensPerDay: accountConfig.provider === 'kiro' ? 1000000 : 100000,
             tokensPerDayUsed: 0,
             resetTime: Date.now() + 24 * 60 * 60 * 1000,
           },
@@ -102,16 +110,10 @@ export class AccountPoolManager {
             successRate: 1.0,
             lastUsed: 0,
           },
-          costEfficiency: 0.7, // Paid accounts have lower cost efficiency
+          costEfficiency: accountConfig.provider === 'kiro' ? 1.0 : 0.7,
         };
-        this.addAccount(account);
-      }
-    }
-    
-    // Add Kiro accounts
-    if (this.config.kiroAccounts) {
-      for (const kiroConfig of this.config.kiroAccounts) {
-        this.addKiroAccount(kiroConfig);
+        
+        this.addAccount(poolAccount);
       }
     }
   }
@@ -121,37 +123,8 @@ export class AccountPoolManager {
    * 
    * @param account - Account to add
    */
-  addAccount(account: Account): void {
+  addAccount(account: PoolAccount): void {
     this.accounts.set(account.id, account);
-  }
-
-  /**
-   * Add Kiro account to the pool
-   * 
-   * @param config - Kiro account configuration
-   */
-  addKiroAccount(config: KiroAccountConfig): void {
-    const account: Account = {
-      id: config.id,
-      apiKey: config.apiKey,
-      provider: 'kiro',
-      quota: {
-        requestsPerMinute: 1000, // High limit for Kiro accounts
-        requestsPerMinuteUsed: 0,
-        tokensPerDay: 1000000, // High limit for Kiro accounts
-        tokensPerDayUsed: 0,
-        resetTime: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
-      },
-      performance: {
-        averageLatency: 0,
-        successRate: 1.0,
-        lastUsed: 0,
-      },
-      costEfficiency: 1.0, // Kiro accounts are free (most efficient)
-      kiroConfig: config, // Store Kiro-specific configuration
-    };
-
-    this.addAccount(account);
   }
 
   /**
@@ -183,7 +156,79 @@ export class AccountPoolManager {
     // Sort by score (highest first)
     scoredAccounts.sort((a, b) => b.score - a.score);
 
-    return scoredAccounts[0];
+    const selectedResult = scoredAccounts[0];
+    
+    // For OAuth accounts, check if session needs refresh
+    if (selectedResult.account.provider === 'kiro') {
+      const needsRefresh = await this.authManager.needsRefresh(selectedResult.account);
+      if (needsRefresh) {
+        try {
+          await this.authManager.refreshSession(selectedResult.account);
+        } catch (error) {
+          // If refresh fails, try next account
+          if (scoredAccounts.length > 1) {
+            return scoredAccounts[1];
+          }
+          throw new Error('Failed to refresh OAuth session and no alternative accounts available');
+        }
+      }
+    }
+
+    return selectedResult;
+  }
+
+  /**
+   * Route request to appropriate client based on account provider
+   * 
+   * @param account - Account to use
+   * @param request - Anthropic API request
+   * @returns Anthropic API response
+   */
+  async routeRequest(account: PoolAccount, request: AnthropicRequest): Promise<AnthropicResponse> {
+    try {
+      let response: AnthropicResponse;
+      
+      // Route to appropriate client based on provider
+      switch (account.provider) {
+        case 'anthropic':
+          response = await this.anthropicClient.sendRequest(request, account.apiKey);
+          break;
+          
+        case 'proxy':
+          response = await this.proxyClient.sendRequest(
+            request,
+            account.apiKey,
+            account.baseURL
+          );
+          break;
+          
+        case 'kiro':
+          if (!account.kiroConfig.sessionToken) {
+            throw new Error('OAuth account missing sessionToken');
+          }
+          response = await this.oauthClient.sendRequest(
+            request,
+            account.kiroConfig.sessionToken,
+            account.kiroConfig.mitmRouterUrl
+          );
+          break;
+          
+        default:
+          throw new Error(`Unsupported account provider: ${(account as any).provider}`);
+      }
+      
+      // Response is already validated by the client, but double-check
+      if (!this.responseValidator.isAnthropicFormat(response)) {
+        throw new Error(`Invalid response format from ${account.provider} account`);
+      }
+      
+      return response;
+      
+    } catch (error) {
+      // Re-throw with context
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Request failed for ${account.provider} account ${account.id}: ${errorMessage}`);
+    }
   }
 
   /**
@@ -192,7 +237,7 @@ export class AccountPoolManager {
    * @param account - Account to score
    * @returns Score (0-1, higher is better)
    */
-  private calculateAccountScore(account: Account): number {
+  private calculateAccountScore(account: PoolAccount): number {
     // Factor 1: Quota availability (40% weight)
     const quotaScore = this.calculateQuotaScore(account.quota);
 
@@ -261,7 +306,7 @@ export class AccountPoolManager {
    * @param account - Selected account
    * @returns Reason string
    */
-  private getSelectionReason(account: Account): string {
+  private getSelectionReason(account: PoolAccount): string {
     if (account.provider === 'kiro') {
       return 'Kiro account (free, high priority)';
     }
@@ -375,7 +420,7 @@ export class AccountPoolManager {
    * 
    * @param account - Account with updated quota
    */
-  private async storeQuotaInRedis(account: Account): Promise<void> {
+  private async storeQuotaInRedis(account: PoolAccount): Promise<void> {
     const key = `quota:${account.id}`;
     const data = JSON.stringify(account.quota);
 
@@ -428,7 +473,7 @@ export class AccountPoolManager {
    * 
    * @returns Array of accounts
    */
-  getAccounts(): Account[] {
+  getAccounts(): PoolAccount[] {
     return Array.from(this.accounts.values());
   }
 
@@ -438,7 +483,7 @@ export class AccountPoolManager {
    * @param accountId - Account ID
    * @returns Account or undefined
    */
-  getAccount(accountId: string): Account | undefined {
+  getAccount(accountId: string): PoolAccount | undefined {
     return this.accounts.get(accountId);
   }
 }

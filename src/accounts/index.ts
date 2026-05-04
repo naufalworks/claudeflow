@@ -4,8 +4,7 @@
 
 export { AccountPoolManager } from './account-pool-manager';
 export type {
-  Account,
-  KiroAccountConfig,
+  PoolAccount,
   AccountQuota,
   AccountPerformance,
   AccountSelectionResult,

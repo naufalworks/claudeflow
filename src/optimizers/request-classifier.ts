@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { AnthropicRequest } from '../types';
+import { AnthropicRequest } from '../types/index.js';
 
 /**
  * Request classification result
@@ -45,28 +45,40 @@ export class RequestClassifier {
    * 
    * Uses Claude Sonnet to analyze request features and determine complexity level.
    * Returns classification with suggested thinking budget and model.
+   * 
+   * If no API key is configured, falls back to heuristic classification.
    */
   async classify(request: AnthropicRequest): Promise<RequestClassification> {
     // Extract features from request
     const features = this.extractFeatures(request);
 
-    // Generate classification prompt
-    const prompt = this.generateClassificationPrompt(features);
+    // If no API key configured, use heuristic classification
+    if (!this.anthropic.apiKey) {
+      return this.heuristicClassification(features);
+    }
 
-    // Call Claude Sonnet for classification
-    const response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 200,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
+    try {
+      // Generate classification prompt
+      const prompt = this.generateClassificationPrompt(features);
 
-    // Parse classification from response
-    return this.parseClassification(response, features);
+      // Call Claude Sonnet for classification
+      const response = await this.anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      });
+
+      // Parse classification from response
+      return this.parseClassification(response, features);
+    } catch (error) {
+      // Fallback to heuristic classification on error
+      return this.heuristicClassification(features);
+    }
   }
 
   // ============================================================================

@@ -24,11 +24,32 @@ ClaudeFlow preserves 100% of Anthropic API capabilities while adding intelligent
 
 ### Account Management
 
-- **Multi-Account Intelligence**: Optimal routing across multiple Anthropic accounts
-- **Kiro OAuth Support**: Free Claude access via Kiro accounts with MITM router
+ClaudeFlow supports **three account types** for maximum flexibility:
+
+#### 1. Direct Anthropic (Recommended)
+- **Most reliable**: Direct connection to Anthropic API
+- **No format conversion**: 100% native Anthropic format
+- **Best performance**: Lowest latency
+- **Use when**: You have Anthropic API keys
+
+#### 2. Anthropic-Compatible Proxy
+- **For MITM proxies only**: Must preserve raw Anthropic format unchanged
+- **⚠️ CRITICAL**: NOT for 9router or proxies that convert to OpenAI format
+- **Format validation**: Automatic rejection of non-Anthropic responses
+- **Use when**: You have a true MITM proxy that forwards Anthropic format
+
+#### 3. OAuth (Kiro Accounts)
+- **Backward compatibility**: For existing OAuth setups
+- **Session management**: Automatic session refresh and rotation
+- **Use when**: You have existing Kiro OAuth accounts
+
+**Additional Features:**
+- **Multi-Account Intelligence**: Optimal routing across multiple accounts
 - **Account Pooling**: Round-robin and sticky strategies for load balancing
-- **Automatic Session Management**: Session refresh and rotation
+- **Automatic Session Management**: Session refresh and rotation for OAuth
 - **Quota Tracking**: Real-time quota monitoring and prediction
+
+> **⚠️ IMPORTANT**: All account types MUST return raw Anthropic format responses. ClaudeFlow will automatically reject non-Anthropic format responses (e.g., OpenAI format from 9router).
 
 ### Monitoring & Analytics
 
@@ -128,6 +149,7 @@ All Anthropic features work natively:
 
 ## 📖 Documentation
 
+- **[Configuration Guide](docs/CONFIGURATION.md)**: Complete account setup and configuration reference
 - **[CLI Tool Guide](docs/CLI.md)**: Complete CLI reference and usage examples
 - **[API Documentation](docs/API.md)**: Complete API reference with examples
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Production deployment instructions
@@ -206,24 +228,28 @@ Configuration is stored in `~/.claudeflow/config.json`. See [CLI Documentation](
 ### Environment Variables
 
 ```bash
-# Server
-PORT=20129
-NODE_ENV=production
-
 # Infrastructure
 QDRANT_URL=http://localhost:6333
 REDIS_URL=redis://localhost:6379
 VOYAGE_API_KEY=your_voyage_api_key
 
-# Anthropic Accounts
+# Direct Anthropic Accounts (RECOMMENDED)
 ANTHROPIC_API_KEY_1=sk-ant-api03-...
 ANTHROPIC_API_KEY_2=sk-ant-api03-...
 
-# Kiro OAuth (Optional)
-KIRO_MITM_ROUTER_URL=http://3.68.219.151:20128
-KIRO_ACCOUNT_1_MACHINE_ID=your_machine_id
-KIRO_ACCOUNT_1_API_KEY=sk-ant-api03-...
+# Anthropic-Compatible Proxy Accounts
+# ⚠️  WARNING: Only use with proxies that return raw Anthropic format
+# ❌ NOT SUPPORTED: 9router (converts to OpenAI format)
+PROXY_API_KEY_1=your-proxy-api-key
+PROXY_BASE_URL_1=http://localhost:8080
+
+# OAuth Accounts (Kiro) - For backward compatibility
+KIRO_MACHINE_ID_1=your_machine_id
+KIRO_API_KEY_1=sk-ant-api03-...
+KIRO_MITM_ROUTER_URL_1=http://3.68.219.151:20128
 ```
+
+See [Configuration Guide](docs/CONFIGURATION.md) for detailed account setup instructions.
 
 ### Configuration File
 

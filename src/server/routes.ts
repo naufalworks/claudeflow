@@ -247,7 +247,7 @@ export async function handleMessagesRequest(
           const kiroConfig = {
             machineId: accountSelection.account.kiroConfig!.machineId,
             sessionToken: accountSelection.account.apiKey, // Session token stored as apiKey
-            apiKey: accountSelection.account.kiroConfig!.apiKey,
+            apiKey: accountSelection.account.apiKey, // API key at account level
             mitmRouterUrl: accountSelection.account.kiroConfig!.mitmRouterUrl,
           };
           
@@ -611,7 +611,7 @@ async function handleStreamingRequest(
           const kiroConfig = {
             machineId: accountSelection.account.kiroConfig!.machineId,
             sessionToken: accountSelection.account.apiKey, // Session token stored as apiKey
-            apiKey: accountSelection.account.kiroConfig!.apiKey,
+            apiKey: accountSelection.account.apiKey, // API key at account level
             mitmRouterUrl: accountSelection.account.kiroConfig!.mitmRouterUrl,
           };
           

@@ -41,7 +41,10 @@ async function main(): Promise<void> {
 
     // Show help if no command provided
     if (!process.argv.slice(2).length) {
-      program.outputHelp();
+      // Show interactive main menu
+      const { showMainMenu } = await import('../ui/main-menu.js');
+      await showMainMenu();
+      return;
     }
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
@@ -107,7 +110,22 @@ async function setupCommands(program: Command): Promise<void> {
     mitmStartCommand,
     mitmStopCommand,
     mitmStatusCommand,
+    dashboardCommand,
   } = commands;
+
+  // Dashboard command (beautiful TUI)
+  program
+    .command('dashboard')
+    .alias('ui')
+    .description('Launch beautiful TUI dashboard (recommended)')
+    .action(async () => {
+      try {
+        await dashboardCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
 
   // Login command (enhanced with multiple methods)
   program

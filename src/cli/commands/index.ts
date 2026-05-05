@@ -63,3 +63,4 @@ export {
   mitmStopCommand,
   mitmStatusCommand,
 } from './mitm.js';
+export { dashboardCommand } from './dashboard.js';

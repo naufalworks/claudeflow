@@ -1,253 +1,381 @@
 /**
  * Login Command
  * 
- * Interactive Kiro account login via OAuth
+ * Interactive Kiro OAuth login via web browser
+ * Supports AWS Builder ID, Google, and GitHub authentication
  */
 
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
-import { ConfigService } from '../services/config-service.js';
-import { AuthService } from '../services/auth-service.js';
-import { RedisClientWrapper } from '../../infrastructure/redis.js';
+import { OAuthClient } from '../../auth/OAuthClient.js';
+import { KeychainStore } from '../../auth/KeychainStore.js';
+import { ConfigurationManager } from '../../config/manager.js';
 import { logger } from '../utils/logger.js';
-import type { LoginOptions, Credentials } from '../types/cli.types.js';
-import type { OAuthAccount } from '../../config/schema.js';
+import {
+  sanitizeToken,
+  validateProvider,
+  validateRegion,
+  generateAccountId,
+  logSecurityEvent,
+  type OAuthProvider,
+  type ValidRegion,
+} from '../utils/security.js';
+import type { OAuthClientConfig } from '../../types/kiro-oauth.types.js';
+import type { KiroOAuthAccount } from '../../config/schema.js';
+
+/**
+ * Login command options
+ */
+interface LoginOptions {
+  provider?: string;
+  region?: string;
+  token?: string;
+}
 
 /**
  * Login command handler
  * 
+ * Implements OAuth 2.0 + PKCE flow for Kiro authentication
+ * 
  * @param options - Login options
  */
-export async function loginCommand(options: LoginOptions): Promise<void> {
+export async function loginCommand(options: LoginOptions = {}): Promise<void> {
   try {
-    logger.info('Starting login command');
+    logger.info('Starting Kiro OAuth login command', { options });
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
+    const oauthClient = new OAuthClient();
 
-    const config = await configService.getConfig();
-    const redisClient = new RedisClientWrapper({ url: config.infrastructure.redisUrl });
-    await redisClient.connect();
+    // Get provider and region (interactive or from options)
+    const provider = options.provider 
+      ? await validateProviderOption(options.provider)
+      : await promptProvider();
 
-    const authService = new AuthService(configService, redisClient);
-    await authService.initialize();
+    const region = options.region
+      ? await validateRegionOption(options.region)
+      : await promptRegion();
 
-    // Get credentials (interactive or from options)
-    const credentials = options.machineId && options.apiKey
-      ? {
-          machineId: options.machineId,
-          apiKey: options.apiKey,
-          mitmRouterUrl: config.infrastructure.mitmRouterUrl,
+    // Build OAuth config
+    const oauthConfig: OAuthClientConfig = {
+      provider,
+      region,
+    };
+
+    console.log(chalk.blue.bold('\n🔐 Kiro OAuth Login\n'));
+    console.log(chalk.gray(`Provider: ${provider}`));
+    console.log(chalk.gray(`Region: ${region}\n`));
+
+    let tokens;
+    let profileArn: string;
+
+    // Check if using non-interactive mode (--token flag)
+    if (options.token) {
+      // Non-interactive mode for CI/CD
+      console.log(chalk.gray('Using non-interactive mode (--token provided)\n'));
+
+      const spinner = ora('Refreshing authentication token...').start();
+
+      try {
+        tokens = await oauthClient.loginWithToken(options.token, oauthConfig);
+        spinner.succeed('Token refreshed successfully!');
+
+        // Extract profileArn from token (JWT decode)
+        profileArn = await extractProfileArnFromToken(tokens.accessToken);
+      } catch (error) {
+        spinner.fail('Token refresh failed');
+        throw error;
+      }
+    } else {
+      // Interactive mode - open browser
+      try {
+        tokens = await oauthClient.login(oauthConfig);
+
+        // Extract profileArn from token (JWT decode)
+        profileArn = await extractProfileArnFromToken(tokens.accessToken);
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error(chalk.red(`\n✗ Authentication failed: ${error.message}`));
+
+          if (error.message.includes('timeout')) {
+            console.error(chalk.yellow('\nTroubleshooting:'));
+            console.error(chalk.yellow('  • Make sure you complete authentication in the browser'));
+            console.error(chalk.yellow('  • Check that the callback server is accessible'));
+            console.error(chalk.yellow('  • Try running the command again'));
+          } else if (error.message.includes('state mismatch')) {
+            console.error(chalk.yellow('\nSecurity Error:'));
+            console.error(chalk.yellow('  • Possible CSRF attack detected'));
+            console.error(chalk.yellow('  • Try running the command again'));
+          }
         }
-      : await promptCredentials(config.infrastructure.mitmRouterUrl);
 
-    // Validate credentials
-    const validation = validateCredentials(credentials);
-    if (!validation.valid) {
-      console.error(chalk.red('✗ Invalid credentials:'));
-      validation.errors.forEach((error) => {
-        console.error(chalk.red(`  - ${error}`));
-      });
-      process.exit(1);
+        logger.error('OAuth login failed', error);
+        process.exit(1);
+      }
     }
 
-    // Authenticate
-    const spinner = ora('Authenticating with Kiro...').start();
+    // Generate deterministic account ID from profileArn
+    const accountId = generateAccountId(profileArn);
+
+    // Check for duplicate account
+    const config = configManager.getConfig();
+    const existingAccount = config.accounts.find(a => a.id === accountId);
+
+    if (existingAccount) {
+      console.log(chalk.yellow(`\n⚠ Account ${accountId} already exists`));
+      
+      const { shouldUpdate } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldUpdate',
+          message: 'Update existing account credentials?',
+          default: true,
+        },
+      ]);
+
+      if (!shouldUpdate) {
+        console.log(chalk.gray('Login cancelled'));
+        return;
+      }
+    }
+
+    // Store credentials in KeychainStore (secure storage)
+    const spinner = ora('Storing credentials securely...').start();
 
     try {
-      const session = await authService.authenticate(
-        credentials.machineId,
-        credentials.apiKey,
-        credentials.mitmRouterUrl
-      );
+      await keychainStore.store(accountId, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt.toISOString(),
+      });
 
-      spinner.succeed('Authentication successful!');
-
-      // Generate account ID
-      const accountId = `kiro-${credentials.machineId}`;
-
-      // Check if account already exists
-      const existingAccount = config.accounts.find(a => a.id === accountId);
-
-      if (existingAccount && existingAccount.provider === 'kiro') {
-        // Update existing OAuth account
-        existingAccount.kiroConfig.sessionToken = session.sessionToken;
-        existingAccount.kiroConfig.sessionExpiry = session.expiresAt;
-        existingAccount.lastUsed = Date.now();
-        await configService.save(config);
-
-        console.log(chalk.green('\n✓ Account updated successfully!'));
-      } else {
-        // Add new OAuth account
-        const newAccount: OAuthAccount = {
-          id: accountId,
-          provider: 'kiro',
-          apiKey: credentials.apiKey,
-          kiroConfig: {
-            machineId: credentials.machineId,
-            mitmRouterUrl: credentials.mitmRouterUrl || config.infrastructure.mitmRouterUrl,
-            sessionToken: session.sessionToken,
-            sessionExpiry: session.expiresAt,
-          },
-          lastUsed: Date.now(),
-          requestCount: 0,
-        };
-
-        config.accounts.push(newAccount);
-        await configService.save(config);
-
-        console.log(chalk.green('\n✓ Account added successfully!'));
-      }
-
-      // Display account details
-      console.log(chalk.blue('\nAccount Details:'));
-      console.log(chalk.gray('─'.repeat(50)));
-      console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-      console.log(`${chalk.bold('Machine ID:')} ${credentials.machineId}`);
-      console.log(`${chalk.bold('MITM Router:')} ${credentials.mitmRouterUrl || config.infrastructure.mitmRouterUrl}`);
-      console.log(`${chalk.bold('Session Expires:')} ${session.expiresAt.toLocaleString()}`);
-      console.log(chalk.gray('─'.repeat(50)));
-
-      console.log(chalk.green('\n✓ You can now use ClaudeFlow with this account!'));
-      console.log(chalk.gray('\nNext steps:'));
-      console.log(chalk.gray('  • Start the daemon: claudeflow daemon start'));
-      console.log(chalk.gray('  • Check quota: claudeflow quota show'));
-      console.log(chalk.gray('  • View accounts: claudeflow account list'));
-
-      await redisClient.disconnect();
-      logger.info('Login command completed successfully');
+      spinner.succeed('Credentials stored in OS keychain');
     } catch (error) {
-      spinner.fail('Authentication failed');
-
-      if (error instanceof Error) {
-        console.error(chalk.red(`\n✗ Error: ${error.message}`));
-
-        if (error.message.includes('401') || error.message.includes('403')) {
-          console.error(chalk.yellow('\nPossible causes:'));
-          console.error(chalk.yellow('  • Invalid Machine ID or API key'));
-          console.error(chalk.yellow('  • Account not authorized'));
-          console.error(chalk.yellow('  • API key expired'));
-        } else if (error.message.includes('ECONNREFUSED') || error.message.includes('timeout')) {
-          console.error(chalk.yellow('\nPossible causes:'));
-          console.error(chalk.yellow('  • MITM router is unreachable'));
-          console.error(chalk.yellow('  • Network connectivity issues'));
-          console.error(chalk.yellow('  • Incorrect MITM router URL'));
-        }
-      }
-
-      await redisClient.disconnect();
-      logger.error('Login command failed', error);
-      process.exit(1);
+      spinner.fail('Failed to store credentials');
+      throw error;
     }
+
+    // Store account metadata in config (NO sensitive data)
+    const accountMetadata: KiroOAuthAccount = {
+      id: accountId,
+      provider: 'kiro-oauth',
+      region,
+      profileArn,
+      expiresAt: tokens.expiresAt.toISOString(),
+      lastUsed: Date.now(),
+      requestCount: 0,
+      errorCount: 0,
+      priority: 0,
+    };
+
+    if (existingAccount) {
+      // Update existing account
+      const accountIndex = config.accounts.findIndex(a => a.id === accountId);
+      config.accounts[accountIndex] = accountMetadata;
+    } else {
+      // Add new account
+      config.accounts.push(accountMetadata);
+    }
+
+    // Save config
+    configManager.saveConfig(config);
+
+    // Log security event
+    logSecurityEvent('login', accountId, 'success', {
+      provider,
+      region,
+      profileArn,
+    });
+
+    // Display success message
+    console.log(chalk.green('\n✓ Account added successfully!\n'));
+    console.log(chalk.blue('Account Details:'));
+    console.log(chalk.gray('─'.repeat(60)));
+    console.log(`${chalk.bold('Account ID:')} ${accountId}`);
+    console.log(`${chalk.bold('Provider:')} ${provider}`);
+    console.log(`${chalk.bold('Region:')} ${region}`);
+    console.log(`${chalk.bold('Profile ARN:')} ${profileArn}`);
+    console.log(`${chalk.bold('Token Expires:')} ${tokens.expiresAt.toLocaleString()}`);
+    console.log(`${chalk.bold('Access Token:')} ${sanitizeToken(tokens.accessToken)}`);
+    console.log(chalk.gray('─'.repeat(60)));
+
+    console.log(chalk.green('\n✓ You can now use ClaudeFlow with this account!'));
+    console.log(chalk.gray('\nNext steps:'));
+    console.log(chalk.gray('  • Start the daemon: claudeflow daemon start'));
+    console.log(chalk.gray('  • Check health: claudeflow health'));
+    console.log(chalk.gray('  • View accounts: claudeflow account list'));
+
+    logger.info('Login command completed successfully', { accountId });
   } catch (error) {
     logger.error('Login command error', error);
-    console.error(chalk.red('✗ Unexpected error:'), error instanceof Error ? error.message : String(error));
+    
+    if (error instanceof Error) {
+      console.error(chalk.red('\n✗ Error:'), error.message);
+    } else {
+      console.error(chalk.red('\n✗ Unexpected error:'), String(error));
+    }
+
+    // Log security event
+    logSecurityEvent('login', null, 'failure', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     process.exit(1);
   }
 }
 
 /**
- * Prompt for credentials interactively
+ * Prompt for OAuth provider interactively
  * 
- * @param defaultMitmRouterUrl - Default MITM router URL
- * @returns Credentials
+ * @returns Selected OAuth provider
  */
-async function promptCredentials(defaultMitmRouterUrl: string): Promise<Credentials> {
-  console.log(chalk.blue.bold('\n🔐 Kiro Account Login\n'));
-  console.log(chalk.gray('Please provide your Kiro account credentials.\n'));
-
-  const answers = await inquirer.prompt([
+async function promptProvider(): Promise<OAuthProvider> {
+  const { provider } = await inquirer.prompt([
     {
-      type: 'input',
-      name: 'machineId',
-      message: 'Machine ID:',
-      validate: (input: string) => {
-        if (!input || input.trim().length === 0) {
-          return 'Machine ID is required';
-        }
-        if (input.length < 3) {
-          return 'Machine ID must be at least 3 characters';
-        }
-        return true;
-      },
-    },
-    {
-      type: 'password',
-      name: 'apiKey',
-      message: 'API Key:',
-      mask: '*',
-      validate: (input: string) => {
-        if (!input || input.trim().length === 0) {
-          return 'API Key is required';
-        }
-        if (input.length < 10) {
-          return 'API Key must be at least 10 characters';
-        }
-        return true;
-      },
-    },
-    {
-      type: 'input',
-      name: 'mitmRouterUrl',
-      message: 'MITM Router URL:',
-      default: defaultMitmRouterUrl,
-      validate: (input: string) => {
-        if (!input || input.trim().length === 0) {
-          return 'MITM Router URL is required';
-        }
-        try {
-          new URL(input);
-          return true;
-        } catch {
-          return 'Invalid URL format';
-        }
-      },
+      type: 'list',
+      name: 'provider',
+      message: 'Select OAuth provider:',
+      choices: [
+        {
+          name: 'AWS Builder ID (recommended)',
+          value: 'aws',
+        },
+        {
+          name: 'Google',
+          value: 'google',
+        },
+        {
+          name: 'GitHub',
+          value: 'github',
+        },
+      ],
+      default: 'aws',
     },
   ]);
 
-  return {
-    machineId: answers.machineId.trim(),
-    apiKey: answers.apiKey.trim(),
-    mitmRouterUrl: answers.mitmRouterUrl.trim(),
-  };
+  return provider as OAuthProvider;
 }
 
 /**
- * Validate credentials
+ * Prompt for AWS region interactively
  * 
- * @param credentials - Credentials to validate
- * @returns Validation result
+ * @returns Selected AWS region
  */
-function validateCredentials(credentials: Credentials): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
+async function promptRegion(): Promise<ValidRegion> {
+  const { region } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'region',
+      message: 'Select AWS region:',
+      choices: [
+        {
+          name: 'US East (N. Virginia) - us-east-1',
+          value: 'us-east-1',
+        },
+        {
+          name: 'US West (Oregon) - us-west-2',
+          value: 'us-west-2',
+        },
+        {
+          name: 'EU (Frankfurt) - eu-central-1',
+          value: 'eu-central-1',
+        },
+        {
+          name: 'Asia Pacific (Singapore) - ap-southeast-1',
+          value: 'ap-southeast-1',
+        },
+      ],
+      default: 'us-east-1',
+    },
+  ]);
 
-  // Validate Machine ID
-  if (!credentials.machineId || credentials.machineId.trim().length === 0) {
-    errors.push('Machine ID is required');
-  } else if (credentials.machineId.length < 3) {
-    errors.push('Machine ID must be at least 3 characters');
+  return region as ValidRegion;
+}
+
+/**
+ * Validate provider option from CLI flag
+ * 
+ * @param provider - Provider string from CLI
+ * @returns Validated OAuth provider
+ * @throws Error if provider is invalid
+ */
+async function validateProviderOption(provider: string): Promise<OAuthProvider> {
+  try {
+    validateProvider(provider);
+    return provider as OAuthProvider;
+  } catch (error) {
+    throw new Error(
+      `Invalid provider: ${provider}. Must be one of: aws, google, github`
+    );
   }
+}
 
-  // Validate API Key
-  if (!credentials.apiKey || credentials.apiKey.trim().length === 0) {
-    errors.push('API Key is required');
-  } else if (credentials.apiKey.length < 10) {
-    errors.push('API Key must be at least 10 characters');
+/**
+ * Validate region option from CLI flag
+ * 
+ * @param region - Region string from CLI
+ * @returns Validated AWS region
+ * @throws Error if region is invalid
+ */
+async function validateRegionOption(region: string): Promise<ValidRegion> {
+  try {
+    validateRegion(region);
+    return region as ValidRegion;
+  } catch (error) {
+    throw new Error(
+      `Invalid region: ${region}. Must be one of: us-east-1, us-west-2, eu-central-1, ap-southeast-1`
+    );
   }
+}
 
-  // Validate MITM Router URL
-  if (credentials.mitmRouterUrl) {
-    try {
-      new URL(credentials.mitmRouterUrl);
-    } catch {
-      errors.push('Invalid MITM Router URL format');
+/**
+ * Extract profileArn from JWT access token
+ * 
+ * Decodes the JWT token and extracts the profile ARN from claims.
+ * 
+ * @param accessToken - JWT access token
+ * @returns Profile ARN
+ * @throws Error if token is invalid or profileArn not found
+ */
+async function extractProfileArnFromToken(accessToken: string): Promise<string> {
+  try {
+    // JWT tokens have 3 parts: header.payload.signature
+    const parts = accessToken.split('.');
+    
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT token format');
     }
-  }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+    // Decode payload (base64url)
+    const payload = parts[1];
+    const decoded = Buffer.from(payload, 'base64url').toString('utf8');
+    const claims = JSON.parse(decoded);
+
+    // Extract profileArn from claims
+    // The exact claim name may vary - check common locations
+    const profileArn = 
+      claims.profile_arn || 
+      claims.profileArn || 
+      claims.sub || 
+      claims['custom:profile_arn'];
+
+    if (!profileArn) {
+      throw new Error('Profile ARN not found in token claims');
+    }
+
+    // Validate ARN format
+    const arnPattern = /^arn:aws:codewhisperer:[a-z0-9-]+:\d+:profile\/[a-zA-Z0-9-]+$/;
+    if (!arnPattern.test(profileArn)) {
+      throw new Error(`Invalid profile ARN format: ${profileArn}`);
+    }
+
+    return profileArn;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to extract profile ARN from token: ${error.message}`);
+    }
+    throw error;
+  }
 }

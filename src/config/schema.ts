@@ -33,7 +33,9 @@ const ProxyAccountSchema = z.object({
   requestCount: z.number().optional(),
 });
 
-// OAuth account schema (backward compatibility)
+// OAuth account schema (backward compatibility - LEGACY 9router-based)
+// DEPRECATED: This is the old format using 9router which converts Anthropic to OpenAI format
+// New implementations should use KiroOAuthAccountSchema instead
 const OAuthAccountSchema = z.object({
   id: z.string(),
   provider: z.literal('kiro'),
@@ -54,17 +56,37 @@ const OAuthAccountSchema = z.object({
   requestCount: z.number().optional(),
 });
 
+// Kiro OAuth account schema (NEW - direct Kiro OAuth, no 9router)
+// This replaces the legacy OAuthAccountSchema with direct OAuth 2.0 + PKCE authentication
+// Sensitive credentials (tokens, secrets) are stored in OS keychain, NOT in this schema
+const KiroOAuthAccountSchema = z.object({
+  id: z.string().regex(/^kiro-[a-f0-9]+$/, 'Must be format: kiro-{hash}'),
+  provider: z.literal('kiro-oauth'),
+  region: z.enum(['us-east-1', 'us-west-2', 'eu-central-1', 'ap-southeast-1']),
+  profileArn: z.string().regex(
+    /^arn:aws:codewhisperer:[a-z0-9-]+:[0-9]+:profile\/[a-zA-Z0-9-]+$/,
+    'Must be valid AWS ARN for CodeWhisperer profile'
+  ),
+  expiresAt: z.string().datetime(),
+  lastUsed: z.number().optional().default(0),
+  requestCount: z.number().int().nonnegative().optional().default(0),
+  errorCount: z.number().int().nonnegative().optional().default(0),
+  priority: z.number().int().min(0).max(100).optional().default(0),
+}).strict();
+
 // Discriminated union for type-safe account configuration
 const AccountSchema = z.discriminatedUnion('provider', [
   AnthropicAccountSchema,
   ProxyAccountSchema,
   OAuthAccountSchema,
+  KiroOAuthAccountSchema,
 ]);
 
 // Export individual account types
 export type AnthropicAccount = z.infer<typeof AnthropicAccountSchema>;
 export type ProxyAccount = z.infer<typeof ProxyAccountSchema>;
 export type OAuthAccount = z.infer<typeof OAuthAccountSchema>;
+export type KiroOAuthAccount = z.infer<typeof KiroOAuthAccountSchema>;
 export type Account = z.infer<typeof AccountSchema>;
 
 export const ConfigSchema = z.object({
@@ -81,7 +103,7 @@ export const ConfigSchema = z.object({
       url: z.string(),
     }),
     voyage: z.object({
-      apiKey: z.string().min(1),
+      apiKey: z.string().optional().default(''),
     }),
   }),
   accounts: z.array(AccountSchema).min(1),
@@ -110,6 +132,14 @@ export const ConfigSchema = z.object({
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+
+export {
+  AnthropicAccountSchema,
+  ProxyAccountSchema,
+  OAuthAccountSchema,
+  KiroOAuthAccountSchema,
+  AccountSchema,
+};
 
 export const defaultConfig: Config = {
   server: {

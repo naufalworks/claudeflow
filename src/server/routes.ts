@@ -215,7 +215,7 @@ export async function handleMessagesRequest(
     request.log.info({ requestId }, 'Context optimized');
     
     // 7. Select account
-    const accountPoolManager = new AccountPoolManager(infrastructure.redis, config);
+    const accountPoolManager = new AccountPoolManager(infrastructure.redis, config, infrastructure.keychain);
     const accountSelection = await accountPoolManager.selectAccount();
     
     request.log.info(
@@ -255,8 +255,8 @@ export async function handleMessagesRequest(
           
           request.log.info({ requestId }, 'Received response from Kiro MITM router');
           break; // Success, exit retry loop
-        } else {
-          // Route to Anthropic API directly
+        } else if ('apiKey' in accountSelection.account) {
+          // Route to Anthropic API directly (only for accounts with apiKey)
           request.log.info(
             { requestId, accountId: accountSelection.account.id, attempt },
             'Routing to Anthropic API'
@@ -304,8 +304,10 @@ export async function handleMessagesRequest(
               accountSelection.account.id
             );
             
-            // Update account with new session token
-            accountSelection.account.apiKey = refreshedSession.sessionToken;
+            // Update account with new session token (only for legacy kiro accounts with apiKey)
+            if ('apiKey' in accountSelection.account) {
+              accountSelection.account.apiKey = refreshedSession.sessionToken;
+            }
             
             request.log.info(
               { requestId, accountId: accountSelection.account.id },
@@ -576,7 +578,7 @@ async function handleStreamingRequest(
     request.log.info({ requestId }, 'Context optimized');
     
     // 5. Select account
-    const accountPoolManager = new AccountPoolManager(infrastructure.redis, config);
+    const accountPoolManager = new AccountPoolManager(infrastructure.redis, config, infrastructure.keychain);
     const accountSelection = await accountPoolManager.selectAccount();
     
     request.log.info(
@@ -610,8 +612,8 @@ async function handleStreamingRequest(
           const kiroClient = new KiroMitmClient();
           const kiroConfig = {
             machineId: accountSelection.account.kiroConfig!.machineId,
-            sessionToken: accountSelection.account.apiKey, // Session token stored as apiKey
-            apiKey: accountSelection.account.apiKey, // API key at account level
+            sessionToken: 'apiKey' in accountSelection.account ? accountSelection.account.apiKey : '', // Session token stored as apiKey
+            apiKey: 'apiKey' in accountSelection.account ? accountSelection.account.apiKey : '', // API key at account level
             mitmRouterUrl: accountSelection.account.kiroConfig!.mitmRouterUrl,
           };
           
@@ -633,7 +635,7 @@ async function handleStreamingRequest(
           );
           
           const anthropicClient = new Anthropic({
-            apiKey: accountSelection.account.apiKey,
+            apiKey: 'apiKey' in accountSelection.account ? accountSelection.account.apiKey : '',
           });
           
           // Format request for Anthropic API
@@ -678,8 +680,10 @@ async function handleStreamingRequest(
               accountSelection.account.id
             );
             
-            // Update account with new session token
-            accountSelection.account.apiKey = refreshedSession.sessionToken;
+            // Update account with new session token (only for legacy kiro accounts with apiKey)
+            if ('apiKey' in accountSelection.account) {
+              accountSelection.account.apiKey = refreshedSession.sessionToken;
+            }
             
             request.log.info(
               { requestId, accountId: accountSelection.account.id },

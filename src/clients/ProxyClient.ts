@@ -88,11 +88,22 @@ export class ProxyClient {
 
       // CRITICAL: Validate response is in raw Anthropic format
       if (!this.validator.isAnthropicFormat(response.data)) {
+        // Get detailed validation errors
+        const validationResult = this.validator.validateDetailed(response.data);
+
         throw new ProxyClientError(
-          `Proxy at ${baseURL} returned non-Anthropic format response. ` +
-          `ClaudeFlow only supports proxies that forward raw Anthropic format unchanged. ` +
-          `This proxy appears to convert to OpenAI or another format, which is not supported. ` +
-          `Please use a true MITM proxy that preserves Anthropic format, or use a direct Anthropic account instead.`,
+          `❌ PROXY REJECTED: ${baseURL} returned non-Anthropic format response.\n\n` +
+          `ClaudeFlow ONLY supports proxies that forward raw Anthropic format unchanged.\n\n` +
+          `Validation errors:\n${validationResult.errors.map(e => `  • ${e}`).join('\n')}\n\n` +
+          `SOLUTION:\n` +
+          `  1. Use direct Anthropic API (recommended)\n` +
+          `  2. Use a true MITM proxy that forwards Anthropic format unchanged\n` +
+          `  3. Use Kiro OAuth for free Claude access\n\n` +
+          `NOT SUPPORTED:\n` +
+          `  ❌ 9router (converts to OpenAI format)\n` +
+          `  ❌ OpenRouter (OpenAI format)\n` +
+          `  ❌ Any proxy that converts formats\n\n` +
+          `See docs/ANTHROPIC_FORMAT_ONLY.md for migration guide.`,
           response.status,
           false
         );

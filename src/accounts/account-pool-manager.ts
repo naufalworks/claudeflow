@@ -4,22 +4,36 @@
  * Manages a pool of Anthropic API accounts with intelligent selection
  * based on quota availability, performance, and cost efficiency.
  * 
- * Supports three account types:
+ * Supports four account types:
  * - Direct Anthropic (provider: 'anthropic')
  * - Anthropic-compatible proxies (provider: 'proxy')
- * - OAuth routers (provider: 'kiro')
+ * - OAuth routers (provider: 'kiro') - LEGACY 9router-based
+ * - Kiro OAuth (provider: 'kiro-oauth') - NEW direct OAuth implementation
  * 
  * CRITICAL: All account types MUST return raw Anthropic format.
  */
 
 import type { RedisClientWrapper } from '../infrastructure/redis';
-import type { Account } from '../config/schema';
+import type { Account, KiroOAuthAccount } from '../config/schema';
 import type { AnthropicRequest, AnthropicResponse } from '../types/anthropic.types';
 import { AuthManager } from '../auth/AuthManager.js';
 import { AnthropicClient } from '../clients/AnthropicClient.js';
 import { ProxyClient } from '../clients/ProxyClient.js';
 import { OAuthClient } from '../clients/OAuthClient.js';
+import { KiroAPIClient } from '../clients/KiroAPIClient.js';
 import { ResponseFormatValidator } from '../clients/ResponseFormatValidator.js';
+import { KeychainStore } from '../auth/KeychainStore.js';
+import { CircuitBreaker } from './circuit-breaker.js';
+import { RateLimiter } from './rate-limiter.js';
+import { HealthMonitor, type TokenProvider } from './health-monitor.js';
+import { QuotaTracker } from './quota-tracker.js';
+import { LogSanitizer } from '../utils/log-sanitizer.js';
+import { createHash } from 'crypto';
+import {
+  NoHealthyAccountsError,
+  AuthenticationError,
+  QuotaExhaustedError,
+} from '../errors/kiro-errors.js';
 
 /**
  * Pool account - wraps config Account with runtime fields
@@ -70,18 +84,37 @@ export class AccountPoolManager {
   private anthropicClient: AnthropicClient;
   private proxyClient: ProxyClient;
   private oauthClient: OAuthClient;
+  private kiroApiClient: KiroAPIClient;
   private responseValidator: ResponseFormatValidator;
+  private keychainStore: KeychainStore;
+  
+  // Component instances for kiro-oauth accounts
+  private circuitBreakers: Map<string, CircuitBreaker> = new Map();
+  private rateLimiters: Map<string, RateLimiter> = new Map();
+  private healthMonitors: Map<string, HealthMonitor> = new Map();
+  private quotaTrackers: Map<string, QuotaTracker> = new Map();
 
-  constructor(redisClient: RedisClientWrapper, config: any) {
+  // Token refresh mutex to prevent concurrent refresh race conditions
+  private tokenRefreshLocks: Map<string, Promise<void>> = new Map();
+
+  // Error recovery constants
+  private static readonly MAX_AUTH_RETRIES = 1; // Max refresh+retry for 401 errors
+  private static readonly MAX_RATE_LIMIT_RETRIES = 3; // Max retries for 429 errors
+  private static readonly MAX_RETRY_AFTER_MS = 60000; // Cap retry-after at 60s (DoS prevention)
+  private static readonly BASE_BACKOFF_MS = 1000; // Base exponential backoff delay
+
+  constructor(redisClient: RedisClientWrapper, config: any, keychainStore: KeychainStore) {
     this.accounts = new Map();
     this.redisClient = redisClient;
     this.config = config;
+    this.keychainStore = keychainStore;
     
     // Initialize clients
     this.authManager = new AuthManager();
     this.anthropicClient = new AnthropicClient();
     this.proxyClient = new ProxyClient();
     this.oauthClient = new OAuthClient();
+    this.kiroApiClient = new KiroAPIClient();
     this.responseValidator = new ResponseFormatValidator();
     
     // Initialize accounts from configuration
@@ -95,6 +128,49 @@ export class AccountPoolManager {
     // Load all accounts from unified accounts array
     if (this.config.accounts) {
       for (const accountConfig of this.config.accounts) {
+        // Handle kiro-oauth accounts (new direct OAuth implementation)
+        if (accountConfig.provider === 'kiro-oauth') {
+          const kiroAccount = accountConfig as KiroOAuthAccount;
+          
+          // Generate deterministic account ID from profileArn
+          const accountId = this.generateAccountId(kiroAccount.profileArn);
+          
+          // Create pool account with runtime fields
+          const poolAccount: PoolAccount = {
+            ...kiroAccount,
+            id: accountId,
+            quota: {
+              requestsPerMinute: 1000,
+              requestsPerMinuteUsed: 0,
+              tokensPerDay: 1000000,
+              tokensPerDayUsed: 0,
+              resetTime: Date.now() + 24 * 60 * 60 * 1000,
+            },
+            performance: {
+              averageLatency: 0,
+              successRate: 1.0,
+              lastUsed: 0,
+            },
+            costEfficiency: 1.0, // Free tier
+          };
+          
+          // Initialize components for this account
+          this.circuitBreakers.set(accountId, new CircuitBreaker(accountId));
+          this.rateLimiters.set(accountId, new RateLimiter(accountId));
+          this.quotaTrackers.set(accountId, new QuotaTracker(accountId));
+          
+          // Initialize health monitor with token provider
+          const healthMonitor = new HealthMonitor(
+            accountId,
+            this.kiroApiClient,
+            this.createTokenProvider()
+          );
+          this.healthMonitors.set(accountId, healthMonitor);
+          
+          this.addAccount(poolAccount);
+          continue;
+        }
+        
         // Create pool account with runtime fields based on provider type
         const poolAccount: PoolAccount = {
           ...accountConfig,
@@ -119,6 +195,50 @@ export class AccountPoolManager {
   }
 
   /**
+   * Generate deterministic account ID from profile ARN
+   * 
+   * @param profileArn - AWS CodeWhisperer profile ARN
+   * @returns Account ID in format: kiro-{hash}
+   * @throws {Error} If profileArn is invalid
+   */
+  private generateAccountId(profileArn: string): string {
+    // Validate profileArn format
+    const arnPattern = /^arn:aws:codewhisperer:[a-z0-9-]+:[0-9]+:profile\/[a-zA-Z0-9-]+$/;
+    if (!arnPattern.test(profileArn)) {
+      throw new Error(`Invalid profileArn format: ${profileArn}`);
+    }
+
+    // Hash the profileArn using SHA-256
+    const hash = createHash('sha256').update(profileArn).digest('hex');
+    
+    // Take first 16 hex characters
+    const shortHash = hash.substring(0, 16);
+    
+    // Return in format: kiro-{hash}
+    return `kiro-${shortHash}`;
+  }
+
+  /**
+   * Create token provider callback for health monitors
+   * 
+   * @returns TokenProvider function that retrieves access tokens from keychain
+   */
+  private createTokenProvider(): TokenProvider {
+    return async (accountId: string): Promise<string> => {
+      const credentials = await this.keychainStore.retrieve(accountId);
+      
+      if (!credentials || !credentials.accessToken) {
+        throw new AuthenticationError(
+          accountId,
+          'No credentials found in keychain'
+        );
+      }
+      
+      return credentials.accessToken;
+    };
+  }
+
+  /**
    * Add account to the pool
    * 
    * @param account - Account to add
@@ -130,6 +250,14 @@ export class AccountPoolManager {
   /**
    * Select best available account for request
    * 
+   * Multi-stage filtering process:
+   * 1. Filter out accounts with open circuit breakers
+   * 2. Filter out unhealthy accounts
+   * 3. Filter out accounts near rate limit
+   * 4. Filter out accounts near quota limit
+   * 5. Score remaining accounts
+   * 6. Return highest scoring account
+   * 
    * @returns Account selection result
    */
   async selectAccount(): Promise<AccountSelectionResult> {
@@ -140,8 +268,56 @@ export class AccountPoolManager {
     // Load quota information from Redis for all accounts
     await this.loadQuotaFromRedis();
 
-    // Score all accounts
-    const scoredAccounts = Array.from(this.accounts.values())
+    // Stage 1: Filter by circuit breaker state
+    let availableAccounts = Array.from(this.accounts.values()).filter((account) => {
+      // For kiro-oauth accounts, check circuit breaker
+      if (account.provider === 'kiro-oauth') {
+        const circuitBreaker = this.circuitBreakers.get(account.id);
+        if (circuitBreaker && !circuitBreaker.canExecute()) {
+          return false; // Circuit is open, skip this account
+        }
+      }
+      return true;
+    });
+
+    // Stage 2: Filter by health status
+    availableAccounts = availableAccounts.filter((account) => {
+      // For kiro-oauth accounts, check health monitor
+      if (account.provider === 'kiro-oauth') {
+        const healthMonitor = this.healthMonitors.get(account.id);
+        if (healthMonitor && !healthMonitor.isHealthy()) {
+          return false; // Account is unhealthy, skip
+        }
+      }
+      return true;
+    });
+
+    // Stage 3: Filter by rate limit status
+    availableAccounts = availableAccounts.filter((account) => {
+      // For kiro-oauth accounts, check rate limiter
+      if (account.provider === 'kiro-oauth') {
+        const rateLimiter = this.rateLimiters.get(account.id);
+        if (rateLimiter && rateLimiter.isNearLimit()) {
+          return false; // Near rate limit, skip for preemptive switching
+        }
+      }
+      return true;
+    });
+
+    // Stage 4: Filter by quota status
+    availableAccounts = availableAccounts.filter((account) => {
+      // For kiro-oauth accounts, check quota tracker
+      if (account.provider === 'kiro-oauth') {
+        const quotaTracker = this.quotaTrackers.get(account.id);
+        if (quotaTracker && quotaTracker.isNearLimit()) {
+          return false; // Near quota limit, skip for preemptive switching
+        }
+      }
+      return true;
+    });
+
+    // Stage 5: Score all remaining accounts
+    const scoredAccounts = availableAccounts
       .map((account) => ({
         account,
         score: this.calculateAccountScore(account),
@@ -150,7 +326,7 @@ export class AccountPoolManager {
       .filter((result) => result.score > 0); // Filter out accounts with no quota
 
     if (scoredAccounts.length === 0) {
-      throw new Error('No accounts with available quota');
+      throw new NoHealthyAccountsError();
     }
 
     // Sort by score (highest first)
@@ -213,6 +389,98 @@ export class AccountPoolManager {
           );
           break;
           
+        case 'kiro-oauth': {
+          const kiroAccount = account as KiroOAuthAccount;
+          let authRetries = 0;
+          let rateLimitRetries = 0;
+          
+          while (true) {
+            try {
+              // Get access token from keychain
+              const credentials = await this.keychainStore.retrieve(account.id);
+              if (!credentials || !credentials.accessToken) {
+                throw new AuthenticationError(account.id, 'No credentials found in keychain');
+              }
+
+              // Send request via KiroAPIClient
+              response = await this.kiroApiClient.sendRequest(
+                request,
+                credentials.accessToken,
+                {
+                  region: kiroAccount.region,
+                  timeout: {
+                    connect: 10,
+                    read: 60,
+                  },
+                  retries: 3,
+                }
+              );
+
+              // Success - update metrics and return
+              const quotaTracker = this.quotaTrackers.get(account.id);
+              if (quotaTracker) {
+                quotaTracker.trackRequest('minute');
+                quotaTracker.trackRequest('hour');
+                quotaTracker.trackRequest('day');
+              }
+
+              const circuitBreaker = this.circuitBreakers.get(account.id);
+              if (circuitBreaker) {
+                circuitBreaker.recordSuccess();
+              }
+
+              break; // Exit retry loop on success
+              
+            } catch (error: any) {
+              const statusCode = error.statusCode || error.status;
+
+              // Handle 401 - refresh token and retry once
+              if (statusCode === 401 && authRetries < AccountPoolManager.MAX_AUTH_RETRIES) {
+                try {
+                  await this.refreshTokenWithLock(account.id, account);
+                  authRetries++;
+                  continue; // Retry with new token
+                } catch (refreshError: any) {
+                  // Refresh failed - sanitize error and re-throw
+                  const sanitized = LogSanitizer.sanitize(refreshError.message);
+                  throw new AuthenticationError(account.id, `Token refresh failed: ${sanitized}`);
+                }
+              }
+
+              // Handle 429 - exponential backoff with retry-after header validation
+              if (statusCode === 429 && rateLimitRetries < AccountPoolManager.MAX_RATE_LIMIT_RETRIES) {
+                // Validate and cap retry-after to prevent DoS (Property 9)
+                const retryAfter = Math.min(
+                  error.retryAfter || Math.pow(2, rateLimitRetries) * AccountPoolManager.BASE_BACKOFF_MS,
+                  AccountPoolManager.MAX_RETRY_AFTER_MS
+                );
+                
+                await this.sleep(retryAfter);
+                rateLimitRetries++;
+                continue; // Retry after backoff
+              }
+
+              // Handle 402 - quota exhausted, trigger failover
+              if (statusCode === 402) {
+                throw new QuotaExhaustedError(account.id);
+              }
+
+              // All other errors or max retries reached
+              // Record failure in circuit breaker
+              const circuitBreaker = this.circuitBreakers.get(account.id);
+              if (circuitBreaker) {
+                circuitBreaker.recordFailure();
+              }
+
+              // Sanitize error message to prevent token leakage (Property 18)
+              const sanitized = LogSanitizer.sanitize(error.message || 'Unknown error');
+              throw new Error(`Request failed for kiro-oauth account ${account.id}: ${sanitized}`);
+            }
+          }
+
+          break;
+        }
+          
         default:
           throw new Error(`Unsupported account provider: ${(account as any).provider}`);
       }
@@ -225,9 +493,19 @@ export class AccountPoolManager {
       return response;
       
     } catch (error) {
-      // Re-throw with context
+      // Record failure for kiro-oauth accounts (only if not already recorded in retry loop)
+      // Note: kiro-oauth accounts handle their own circuit breaker updates in the retry loop
+      // This catch block only handles errors from other providers (anthropic, proxy, kiro)
+      if (account.provider !== 'kiro-oauth') {
+        // For non-kiro-oauth accounts, we don't have circuit breakers, so no action needed
+      }
+
+      // Sanitize error message to prevent token leakage (Property 18)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Request failed for ${account.provider} account ${account.id}: ${errorMessage}`);
+      const sanitizedMessage = LogSanitizer.sanitize(errorMessage);
+      
+      // Re-throw with context
+      throw new Error(`Request failed for ${account.provider} account ${account.id}: ${sanitizedMessage}`);
     }
   }
 
@@ -323,6 +601,51 @@ export class AccountPoolManager {
     } else {
       return 'Best available option';
     }
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   * 
+   * @param ms - Milliseconds to sleep
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Refresh token with mutex lock to prevent concurrent refresh race conditions
+   * 
+   * This method ensures that only one refresh operation occurs at a time per account.
+   * If a refresh is already in progress, the caller waits for it to complete.
+   * 
+   * @param accountId - Account ID to refresh
+   * @param account - PoolAccount object
+   * @throws {AuthenticationError} If token refresh fails
+   */
+  private async refreshTokenWithLock(
+    accountId: string,
+    account: PoolAccount
+  ): Promise<void> {
+    // Check if refresh already in progress
+    if (this.tokenRefreshLocks.has(accountId)) {
+      // Wait for existing refresh to complete
+      await this.tokenRefreshLocks.get(accountId);
+      return;
+    }
+
+    // Start new refresh with automatic cleanup
+    const refreshPromise = (async () => {
+      try {
+        await this.authManager.refreshSession(account);
+      } finally {
+        // Always clean up the lock, even on failure
+        this.tokenRefreshLocks.delete(accountId);
+      }
+    })();
+
+    // Store promise in map before awaiting
+    this.tokenRefreshLocks.set(accountId, refreshPromise);
+    await refreshPromise;
   }
 
   /**
@@ -485,5 +808,107 @@ export class AccountPoolManager {
    */
   getAccount(accountId: string): PoolAccount | undefined {
     return this.accounts.get(accountId);
+  }
+
+  /**
+   * Failover to next available account after current account fails
+   * 
+   * @param currentAccountId - ID of account that failed
+   * @returns Next available account selection result
+   * @throws {NoHealthyAccountsError} If no healthy accounts available
+   */
+  async failover(currentAccountId: string): Promise<AccountSelectionResult> {
+    // Mark current account unhealthy
+    this.markUnhealthy(currentAccountId, 'Failover triggered');
+
+    // Record failure in circuit breaker for kiro-oauth accounts
+    const account = this.accounts.get(currentAccountId);
+    if (account && account.provider === 'kiro-oauth') {
+      const circuitBreaker = this.circuitBreakers.get(currentAccountId);
+      if (circuitBreaker) {
+        circuitBreaker.recordFailure();
+      }
+    }
+
+    // Select next available account
+    try {
+      return await this.selectAccount();
+    } catch (error) {
+      if (error instanceof NoHealthyAccountsError) {
+        throw error;
+      }
+      throw new NoHealthyAccountsError();
+    }
+  }
+
+  /**
+   * Mark account as unhealthy
+   * 
+   * @param accountId - Account ID
+   * @param reason - Reason for marking unhealthy
+   */
+  markUnhealthy(accountId: string, reason: string): void {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      return;
+    }
+
+    // Update account status (if it has a status field)
+    if ('status' in account) {
+      (account as any).status = 'unhealthy';
+    }
+
+    // Increment error count for kiro-oauth accounts
+    if (account.provider === 'kiro-oauth' && 'errorCount' in account) {
+      (account as any).errorCount = ((account as any).errorCount || 0) + 1;
+    }
+
+    // Log sanitized reason
+    const sanitizedReason = LogSanitizer.sanitize(reason);
+    console.warn(`Account ${accountId} marked unhealthy: ${sanitizedReason}`);
+  }
+
+  /**
+   * Mark account as healthy
+   * 
+   * @param accountId - Account ID
+   */
+  markHealthy(accountId: string): void {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      return;
+    }
+
+    // Update account status (if it has a status field)
+    if ('status' in account) {
+      (account as any).status = 'healthy';
+    }
+
+    // Reset error count for kiro-oauth accounts
+    if (account.provider === 'kiro-oauth' && 'errorCount' in account) {
+      (account as any).errorCount = 0;
+    }
+
+    console.info(`Account ${accountId} marked healthy`);
+  }
+
+  /**
+   * Start periodic health checks for all kiro-oauth accounts
+   */
+  startHealthChecks(): void {
+    for (const [accountId, healthMonitor] of this.healthMonitors.entries()) {
+      healthMonitor.startHealthChecks();
+      console.info(`Started health checks for account ${accountId}`);
+    }
+  }
+
+  /**
+   * Stop periodic health checks for all kiro-oauth accounts
+   */
+  stopHealthChecks(): void {
+    for (const [accountId, healthMonitor] of this.healthMonitors.entries()) {
+      healthMonitor.stopHealthChecks();
+      console.info(`Stopped health checks for account ${accountId}`);
+    }
   }
 }

@@ -57,12 +57,16 @@ async function setupCommands(program: Command): Promise<void> {
   const commands = await import('../commands/index.js');
   
   const {
-    loginCommand,
-    accountAddCommand,
+    loginEnhancedCommand,
+    tokenExportCommand,
+    tokenImportCommand,
     accountRemoveCommand,
     accountListCommand,
-    accountShowCommand,
     accountRefreshCommand,
+    accountTestCommand,
+    accountSetPriorityCommand,
+    anthropicAddCommand,
+    proxyAddCommand,
     comboCreateCommand,
     comboListCommand,
     comboShowCommand,
@@ -97,19 +101,61 @@ async function setupCommands(program: Command): Promise<void> {
     backupImportCommand,
     setupCommand,
     sessionStatusCommand,
+    migrateCommand,
+    mitmInstallCommand,
+    mitmUninstallCommand,
+    mitmStartCommand,
+    mitmStopCommand,
+    mitmStatusCommand,
   } = commands;
 
-  // Login command
+  // Login command (enhanced with multiple methods)
   program
     .command('login')
-    .description('Login to Kiro account via OAuth')
-    .option('--machine-id <id>', 'Machine ID for non-interactive login')
-    .option('--api-key <key>', 'API key for non-interactive login')
+    .description('Login to Kiro account (Builder ID, SSO, Token Import)')
+    .option('--method <method>', 'Login method: builder-id, sso, token-import, manual-token')
+    .option('--region <region>', 'AWS region')
+    .option('--start-url <url>', 'AWS SSO start URL (for custom IDC)')
+    .option('--token <token>', 'Access token for non-interactive login')
+    .option('--sso-url <url>', 'SSO URL for enterprise login')
     .action(async (options) => {
       try {
-        await loginCommand(options);
+        await loginEnhancedCommand(options);
       } catch (error) {
         console.error(chalk.red('✗ Login failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  // Token command with subcommands
+  const tokenCmd = program
+    .command('token')
+    .description('Export and import Kiro tokens');
+
+  tokenCmd
+    .command('export <accountId>')
+    .description('Export Kiro session token')
+    .option('--output <file>', 'Output file path')
+    .option('--json', 'Output as JSON')
+    .action(async (accountId: string, options) => {
+      try {
+        await tokenExportCommand(accountId, options);
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  tokenCmd
+    .command('import')
+    .description('Import Kiro session token')
+    .option('--input <file>', 'Input file path')
+    .option('--json <data>', 'JSON data string')
+    .action(async (options) => {
+      try {
+        await tokenImportCommand(options);
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
       }
     });
@@ -120,11 +166,12 @@ async function setupCommands(program: Command): Promise<void> {
     .description('Manage Kiro accounts');
 
   accountCmd
-    .command('add')
-    .description('Add a new Kiro account')
-    .action(async () => {
+    .command('list')
+    .description('List all Kiro accounts')
+    .option('--json', 'Output in JSON format')
+    .action(async (options) => {
       try {
-        await accountAddCommand();
+        await accountListCommand(options);
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
@@ -144,35 +191,66 @@ async function setupCommands(program: Command): Promise<void> {
     });
 
   accountCmd
-    .command('list')
-    .description('List all Kiro accounts')
-    .action(async () => {
-      try {
-        await accountListCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  accountCmd
-    .command('show <accountId>')
-    .description('Show detailed account information')
-    .action(async (accountId: string) => {
-      try {
-        await accountShowCommand(accountId);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  accountCmd
     .command('refresh <accountId>')
-    .description('Manually refresh account session')
+    .description('Manually refresh account token')
     .action(async (accountId: string) => {
       try {
         await accountRefreshCommand(accountId);
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  accountCmd
+    .command('test <accountId>')
+    .description('Test account connectivity')
+    .action(async (accountId: string) => {
+      try {
+        await accountTestCommand(accountId);
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  accountCmd
+    .command('set-priority <accountId> <priority>')
+    .description('Set account routing priority (0-100)')
+    .action(async (accountId: string, priority: string) => {
+      try {
+        await accountSetPriorityCommand(accountId, parseInt(priority, 10));
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  // Add Anthropic account command
+  program
+    .command('add-anthropic')
+    .description('Add direct Anthropic API account (RECOMMENDED)')
+    .option('--api-key <key>', 'Anthropic API key (sk-ant-...)')
+    .option('--skip-validation', 'Skip API key validation')
+    .action(async (options) => {
+      try {
+        await anthropicAddCommand(options);
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  // Add proxy account command
+  program
+    .command('add-proxy')
+    .description('Add Anthropic-compatible proxy (MITM only, NOT 9router)')
+    .option('--base-url <url>', 'Proxy base URL')
+    .option('--api-key <key>', 'Proxy API key')
+    .option('--skip-validation', 'Skip proxy validation (not recommended)')
+    .action(async (options) => {
+      try {
+        await proxyAddCommand(options);
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
@@ -264,9 +342,10 @@ async function setupCommands(program: Command): Promise<void> {
   daemonCmd
     .command('start')
     .description('Start ClaudeFlow daemon')
-    .action(async () => {
+    .option('--mitm', 'Start with MITM proxy on port 443')
+    .action(async (options) => {
       try {
-        await daemonStartCommand();
+        await daemonStartCommand(options);
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
@@ -727,6 +806,98 @@ async function setupCommands(program: Command): Promise<void> {
         process.exit(1);
       }
     });
+
+  // Migrate command with subcommands
+  const migrateCmd = program
+    .command('migrate')
+    .description('Migrate from old authentication systems');
+
+  migrateCmd
+    .command('from-9router')
+    .description('Migrate from 9router to Kiro OAuth')
+    .action(async () => {
+      try {
+        await migrateCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  // MITM command with subcommands
+  const mitmCmd = program
+    .command('mitm')
+    .description('Manage MITM proxy for intercepting Kiro CLI/IDE');
+
+  mitmCmd
+    .command('install')
+    .description('Install MITM proxy (CA certificate + hosts file)')
+    .action(async () => {
+      try {
+        await mitmInstallCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  mitmCmd
+    .command('uninstall')
+    .description('Uninstall MITM proxy (remove CA + restore hosts)')
+    .action(async () => {
+      try {
+        await mitmUninstallCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  mitmCmd
+    .command('start')
+    .description('Start MITM proxy server on port 443')
+    .action(async () => {
+      try {
+        await mitmStartCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  mitmCmd
+    .command('stop')
+    .description('Stop MITM proxy server')
+    .action(async () => {
+      try {
+        await mitmStopCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  mitmCmd
+    .command('status')
+    .description('Check MITM proxy status')
+    .action(async () => {
+      try {
+        await mitmStatusCommand();
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  // Make 'mitm' without subcommand default to 'status'
+  mitmCmd.action(async () => {
+    try {
+      await mitmStatusCommand();
+    } catch (error) {
+      console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
 }
 
 

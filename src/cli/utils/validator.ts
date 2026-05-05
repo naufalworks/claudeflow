@@ -210,7 +210,12 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
       if (!account.provider) {
         errors.push(`accounts[${index}].provider: is required`);
       }
-      if (!account.apiKey) {
+      // apiKey is required for anthropic, proxy, and kiro (legacy) providers
+      // but NOT for kiro-oauth (credentials stored in OS keychain)
+      if (
+        account.provider !== 'kiro-oauth' &&
+        !('apiKey' in account && account.apiKey)
+      ) {
         errors.push(`accounts[${index}].apiKey: is required`);
       }
       
@@ -223,8 +228,16 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
           errors.push(`accounts[${index}].kiroConfig.mitmRouterUrl: is required for OAuth accounts`);
         }
       } else if (account.provider === 'proxy') {
-        if (!account.baseURL) {
+        if (!('baseURL' in account && account.baseURL)) {
           errors.push(`accounts[${index}].baseURL: is required for proxy accounts`);
+        }
+      } else if (account.provider === 'kiro-oauth') {
+        // Validate kiro-oauth specific fields
+        if (!('region' in account && account.region)) {
+          errors.push(`accounts[${index}].region: is required for kiro-oauth accounts`);
+        }
+        if (!('profileArn' in account && account.profileArn)) {
+          errors.push(`accounts[${index}].profileArn: is required for kiro-oauth accounts`);
         }
       }
     });

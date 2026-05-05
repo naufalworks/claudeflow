@@ -6,3 +6,6 @@
 
 // Anthropic API types
 export * from './anthropic.types.js';
+
+// Kiro OAuth types
+export * from './kiro-oauth.types.js';

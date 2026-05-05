@@ -5,13 +5,17 @@
  */
 
 export { loginCommand } from './login.js';
+export { loginCommand as loginEnhancedCommand } from './login-enhanced.js';
+export { tokenExportCommand, tokenImportCommand } from './token.js';
 export {
-  accountAddCommand,
   accountRemoveCommand,
   accountListCommand,
-  accountShowCommand,
   accountRefreshCommand,
+  accountTestCommand,
+  accountSetPriorityCommand,
 } from './account.js';
+export { anthropicAddCommand } from './anthropic-add.js';
+export { proxyAddCommand } from './proxy-add.js';
 export {
   comboCreateCommand,
   comboListCommand,
@@ -51,3 +55,11 @@ export {
 } from './backup.js';
 export { setupCommand } from './setup.js';
 export { sessionStatusCommand } from './session.js';
+export { migrateCommand } from './migrate.js';
+export {
+  mitmInstallCommand,
+  mitmUninstallCommand,
+  mitmStartCommand,
+  mitmStopCommand,
+  mitmStatusCommand,
+} from './mitm.js';

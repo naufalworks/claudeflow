@@ -2,10 +2,15 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { Config } from '../config/index.js';
 import { InfrastructureClients, healthCheckAll } from '../infrastructure/index.js';
+import { TokenManager } from '../auth/TokenManager.js';
+import { KeychainStore } from '../auth/KeychainStore.js';
+import { DualAuthModeHandler } from '../auth/DualAuthModeHandler.js';
+import { ConfigurationManager } from '../config/manager.js';
 
 export interface ServerContext {
   config: Config;
   infrastructure: InfrastructureClients;
+  tokenManager?: TokenManager;
 }
 
 export async function createServer(context: ServerContext): Promise<FastifyInstance> {
@@ -125,6 +130,29 @@ export async function createServer(context: ServerContext): Promise<FastifyInsta
 
 export async function startServer(server: FastifyInstance, config: Config): Promise<void> {
   try {
+    // Initialize TokenManager for automatic token refresh
+    const keychainStore = new KeychainStore();
+    const dualAuthModeHandler = new DualAuthModeHandler();
+    const configManager = new ConfigurationManager();
+    const tokenManager = new TokenManager(keychainStore, dualAuthModeHandler, configManager);
+
+    // Start background token refresh worker
+    tokenManager.startRefreshWorker();
+    console.log('✅ Token refresh worker started (checks every 60 seconds)');
+
+    // Store tokenManager in server context for cleanup
+    (server as any).tokenManager = tokenManager;
+
+    // Handle graceful shutdown
+    const cleanup = () => {
+      console.log('\n🛑 Shutting down server...');
+      tokenManager.stopRefreshWorker();
+      console.log('✅ Token refresh worker stopped');
+    };
+
+    process.on('SIGTERM', cleanup);
+    process.on('SIGINT', cleanup);
+
     await server.listen({
       port: config.server.port,
       host: config.server.host,

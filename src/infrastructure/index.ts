@@ -2,6 +2,7 @@ import { QdrantClientWrapper, type QdrantConfig } from './qdrant.js';
 import { RedisClientWrapper, type RedisConfig } from './redis.js';
 import { VoyageClient, type VoyageConfig } from './voyage.js';
 import { AnthropicClientWrapper, type AnthropicConfig } from './anthropic.js';
+import { KeychainStore } from '../auth/KeychainStore.js';
 
 export { QdrantClientWrapper, type QdrantConfig } from './qdrant.js';
 export { RedisClientWrapper, type RedisConfig } from './redis.js';
@@ -13,6 +14,7 @@ export interface InfrastructureClients {
   redis: RedisClientWrapper;
   voyage: VoyageClient;
   anthropic: AnthropicClientWrapper;
+  keychain: KeychainStore;
 }
 
 export async function initializeInfrastructure(config: {
@@ -27,6 +29,7 @@ export async function initializeInfrastructure(config: {
   const redis = new RedisClientWrapper(config.redis);
   const voyage = new VoyageClient(config.voyage);
   const anthropic = new AnthropicClientWrapper(config.anthropic);
+  const keychain = new KeychainStore();
 
   // Connect to services
   await Promise.all([qdrant.connect(), redis.connect()]);
@@ -36,7 +39,7 @@ export async function initializeInfrastructure(config: {
 
   console.log('✅ Infrastructure initialized successfully');
 
-  return { qdrant, redis, voyage, anthropic };
+  return { qdrant, redis, voyage, anthropic, keychain };
 }
 
 export async function healthCheckAll(clients: InfrastructureClients): Promise<{

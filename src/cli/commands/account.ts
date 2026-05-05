@@ -1,425 +1,133 @@
 /**
  * Account Command
  * 
- * Manage accounts (add/remove/list/show/refresh)
- * Supports three account types: Direct Anthropic, Proxy, and OAuth
+ * Manage Kiro OAuth accounts (list/remove/refresh/test/set-priority)
+ * Supports kiro-oauth accounts with secure keychain storage
  */
 
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import Table from 'cli-table3';
-import { ConfigService } from '../services/config-service.js';
-import { AuthService } from '../services/auth-service.js';
-import { RedisClientWrapper } from '../../infrastructure/redis.js';
+import { ConfigurationManager } from '../../config/manager.js';
+import { KeychainStore } from '../../auth/KeychainStore.js';
+import { TokenManager } from '../../auth/TokenManager.js';
+import { DualAuthModeHandler } from '../../auth/DualAuthModeHandler.js';
+import { KiroAPIClient } from '../../clients/KiroAPIClient.js';
 import { logger } from '../utils/logger.js';
-import type { Account, AnthropicAccount, ProxyAccount, OAuthAccount } from '../../config/schema.js';
-
-/**
- * Account add command
- * Supports three account types: Direct Anthropic, Proxy, and OAuth
- */
-export async function accountAddCommand(): Promise<void> {
-  try {
-    logger.info('Starting account add command');
-
-    // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
-
-    const config = await configService.getConfig();
-
-    // Prompt for account type
-    console.log(chalk.blue.bold('\n➕ Add Account\n'));
-    console.log(chalk.gray('Select the account type you want to add.\n'));
-
-    const { provider } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'provider',
-        message: 'Account Type:',
-        choices: [
-          {
-            name: 'Direct Anthropic (api.anthropic.com)',
-            value: 'anthropic',
-          },
-          {
-            name: 'Proxy (Anthropic-compatible MITM proxy)',
-            value: 'proxy',
-          },
-          {
-            name: 'OAuth (OAuth-based router)',
-            value: 'kiro',
-          },
-        ],
-      },
-    ]);
-
-    let newAccount: Account;
-    let accountId: string;
-
-    // Handle Direct Anthropic account
-    if (provider === 'anthropic') {
-      console.log(chalk.gray('\nDirect Anthropic account - connects to api.anthropic.com\n'));
-
-      const answers = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'Anthropic API Key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'API Key is required';
-            }
-            if (!input.startsWith('sk-ant-')) {
-              return 'Invalid Anthropic API key format (must start with sk-ant-)';
-            }
-            if (input.length < 40) {
-              return 'API Key must be at least 40 characters';
-            }
-            return true;
-          },
-        },
-      ]);
-
-      // Generate account ID
-      accountId = `anthropic-${Date.now()}`;
-
-      // Create account object
-      newAccount = {
-        id: accountId,
-        provider: 'anthropic',
-        apiKey: answers.apiKey.trim(),
-      } as AnthropicAccount;
-
-      await configService.addAccount(newAccount);
-
-      console.log(chalk.green('\n✓ Account added successfully!'));
-      console.log(chalk.blue('\nAccount Details:'));
-      console.log(chalk.gray('─'.repeat(50)));
-      console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-      console.log(`${chalk.bold('Provider:')} Direct Anthropic`);
-      console.log(`${chalk.bold('API Key:')} ${answers.apiKey.slice(0, 10)}...${answers.apiKey.slice(-4)}`);
-      console.log(chalk.gray('─'.repeat(50)));
-
-      logger.info('Direct Anthropic account added successfully', { accountId });
-    }
-    // Handle Proxy account
-    else if (provider === 'proxy') {
-      console.log(chalk.gray('\nProxy account - connects to Anthropic-compatible MITM proxy\n'));
-      console.log(chalk.yellow('⚠ WARNING: Proxy must forward raw Anthropic format unchanged (NOT 9router)\n'));
-
-      const answers = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'API Key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'API Key is required';
-            }
-            if (input.length < 10) {
-              return 'API Key must be at least 10 characters';
-            }
-            return true;
-          },
-        },
-        {
-          type: 'input',
-          name: 'baseURL',
-          message: 'Proxy Base URL:',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'Base URL is required';
-            }
-            try {
-              const url = new URL(input);
-              // Validate it's HTTP or HTTPS
-              if (!['http:', 'https:'].includes(url.protocol)) {
-                return 'URL must use HTTP or HTTPS protocol';
-              }
-              return true;
-            } catch {
-              return 'Invalid URL format';
-            }
-          },
-        },
-      ]);
-
-      // Generate account ID
-      accountId = `proxy-${Date.now()}`;
-
-      // Create account object
-      newAccount = {
-        id: accountId,
-        provider: 'proxy',
-        apiKey: answers.apiKey.trim(),
-        baseURL: answers.baseURL.trim(),
-      } as ProxyAccount;
-
-      await configService.addAccount(newAccount);
-
-      console.log(chalk.green('\n✓ Account added successfully!'));
-      console.log(chalk.blue('\nAccount Details:'));
-      console.log(chalk.gray('─'.repeat(50)));
-      console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-      console.log(`${chalk.bold('Provider:')} Proxy`);
-      console.log(`${chalk.bold('Base URL:')} ${answers.baseURL.trim()}`);
-      console.log(`${chalk.bold('API Key:')} ${answers.apiKey.slice(0, 10)}...${answers.apiKey.slice(-4)}`);
-      console.log(chalk.gray('─'.repeat(50)));
-
-      logger.info('Proxy account added successfully', { accountId });
-    }
-    // Handle OAuth account
-    else if (provider === 'kiro') {
-      console.log(chalk.gray('\nOAuth account - connects to OAuth-based router\n'));
-
-      const answers = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'machineId',
-          message: 'Machine ID:',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'Machine ID is required';
-            }
-            if (input.length < 3) {
-              return 'Machine ID must be at least 3 characters';
-            }
-            return true;
-          },
-        },
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'API Key:',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'API Key is required';
-            }
-            if (input.length < 10) {
-              return 'API Key must be at least 10 characters';
-            }
-            return true;
-          },
-        },
-        {
-          type: 'input',
-          name: 'mitmRouterUrl',
-          message: 'OAuth Router URL:',
-          default: 'http://3.68.219.151:20128',
-          validate: (input: string) => {
-            if (!input || input.trim().length === 0) {
-              return 'OAuth Router URL is required';
-            }
-            try {
-              new URL(input);
-              return true;
-            } catch {
-              return 'Invalid URL format';
-            }
-          },
-        },
-      ]);
-
-      // Authenticate to verify credentials
-      const spinner = ora('Authenticating account...').start();
-
-      const redisClient = new RedisClientWrapper({ url: config.infrastructure.redisUrl });
-      await redisClient.connect();
-
-      const authService = new AuthService(configService, redisClient);
-      await authService.initialize();
-
-      try {
-        const session = await authService.authenticate(
-          answers.machineId.trim(),
-          answers.apiKey.trim(),
-          answers.mitmRouterUrl.trim()
-        );
-
-        spinner.succeed('Authentication successful!');
-
-        // Generate account ID
-        accountId = `kiro-${answers.machineId.trim()}`;
-
-        // Check if account already exists
-        const existingAccount = await configService.getAccount(accountId);
-
-        if (existingAccount) {
-          // Update existing OAuth account
-          if (existingAccount.provider === 'kiro') {
-            existingAccount.kiroConfig.sessionToken = session.sessionToken;
-            existingAccount.kiroConfig.sessionExpiry = session.expiresAt;
-            existingAccount.lastUsed = Date.now();
-            await configService.updateAccount(accountId, existingAccount);
-          }
-
-          console.log(chalk.green('\n✓ Account updated successfully!'));
-        } else {
-          // Create account object
-          newAccount = {
-            id: accountId,
-            provider: 'kiro',
-            apiKey: answers.apiKey.trim(),
-            kiroConfig: {
-              machineId: answers.machineId.trim(),
-              mitmRouterUrl: answers.mitmRouterUrl.trim(),
-              sessionToken: session.sessionToken,
-              sessionExpiry: session.expiresAt,
-            },
-          } as OAuthAccount;
-
-          await configService.addAccount(newAccount);
-
-          console.log(chalk.green('\n✓ Account added successfully!'));
-        }
-
-        // Display account details
-        console.log(chalk.blue('\nAccount Details:'));
-        console.log(chalk.gray('─'.repeat(50)));
-        console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-        console.log(`${chalk.bold('Provider:')} OAuth`);
-        console.log(`${chalk.bold('Machine ID:')} ${answers.machineId.trim()}`);
-        console.log(`${chalk.bold('OAuth Router:')} ${answers.mitmRouterUrl.trim()}`);
-        console.log(`${chalk.bold('Session Expires:')} ${session.expiresAt.toLocaleString()}`);
-        console.log(chalk.gray('─'.repeat(50)));
-
-        await redisClient.disconnect();
-        logger.info('OAuth account added successfully', { accountId });
-      } catch (error) {
-        spinner.fail('Authentication failed');
-        await redisClient.disconnect();
-        throw error;
-      }
-    }
-
-    // TODO: Security enhancement - implement encrypted credential storage
-    // Current implementation stores credentials in plaintext. Future task should:
-    // - Use OS credential managers (Keychain/Credential Manager/Secret Service)
-    // - Encrypt API keys and session tokens before storage
-    // - Implement secure credential deletion on account removal
-
-  } catch (error) {
-    logger.error('Account add command failed', error);
-    console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
-
-/**
- * Account remove command
- */
-export async function accountRemoveCommand(accountId: string): Promise<void> {
-  try {
-    logger.info('Starting account remove command', { accountId });
-
-    // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
-
-    // Check if account exists
-    const account = await configService.getAccount(accountId);
-    if (!account) {
-      console.error(chalk.red(`✗ Account '${accountId}' not found`));
-      process.exit(1);
-    }
-
-    // Confirm removal
-    const answers = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: `Are you sure you want to remove account '${accountId}'?`,
-        default: false,
-      },
-    ]);
-
-    if (!answers.confirm) {
-      console.log(chalk.yellow('✗ Account removal cancelled'));
-      return;
-    }
-
-    // Remove account
-    await configService.removeAccount(accountId);
-
-    console.log(chalk.green(`✓ Account '${accountId}' removed successfully`));
-    logger.info('Account remove command completed successfully', { accountId });
-  } catch (error) {
-    logger.error('Account remove command failed', error);
-    console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
+import {
+  validateAccountId,
+  validatePriority,
+  sanitizeToken,
+  logSecurityEvent,
+} from '../utils/security.js';
+import type { KiroOAuthAccount } from '../../config/schema.js';
+import type { KiroAPIConfig } from '../../types/kiro-oauth.types.js';
 
 /**
  * Account list command
+ * 
+ * Displays all Kiro OAuth accounts with status, expiry, and usage info
  */
-export async function accountListCommand(): Promise<void> {
+export async function accountListCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
     logger.info('Starting account list command');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
 
-    const config = await configService.getConfig();
+    // Load config from file
+    const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+    await configManager.loadConfig(configPath);
 
-    if (config.accounts.length === 0) {
-      console.log(chalk.yellow('\nNo accounts configured'));
-      console.log(chalk.gray('Add an account with: claudeflow account add'));
+    const config = configManager.getConfig();
+
+    // Filter for kiro-oauth accounts only
+    const kiroAccounts = config.accounts.filter(
+      a => a.provider === 'kiro-oauth'
+    ) as KiroOAuthAccount[];
+
+    if (kiroAccounts.length === 0) {
+      console.log(chalk.yellow('\nNo Kiro OAuth accounts configured'));
+      console.log(chalk.gray('Add an account with: claudeflow login'));
       return;
     }
 
-    // Initialize auth service to get session statuses for OAuth accounts
-    const redisClient = new RedisClientWrapper({ url: config.infrastructure.redisUrl });
-    await redisClient.connect();
+    // JSON output mode
+    if (options.json) {
+      const jsonOutput = await Promise.all(
+        kiroAccounts.map(async account => {
+          const credentials = await keychainStore.retrieve(account.id);
+          const expiresAt = new Date(account.expiresAt);
+          const now = new Date();
+          const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+          const isExpired = timeUntilExpiry <= 0;
+          const isExpiring = timeUntilExpiry > 0 && timeUntilExpiry < 5 * 60 * 1000;
 
-    const authService = new AuthService(configService, redisClient);
-    await authService.initialize();
+          return {
+            id: account.id,
+            provider: 'kiro-oauth',
+            region: account.region,
+            profileArn: account.profileArn,
+            status: isExpired ? 'expired' : isExpiring ? 'expiring' : 'active',
+            expiresAt: account.expiresAt,
+            lastUsed: account.lastUsed,
+            requestCount: account.requestCount,
+            errorCount: account.errorCount,
+            priority: account.priority,
+            hasCredentials: !!credentials,
+          };
+        })
+      );
 
-    // Get session statuses (only for OAuth accounts)
-    const statuses = await authService.getAllSessionStatuses();
+      console.log(JSON.stringify(jsonOutput, null, 2));
+      return;
+    }
 
-    // Create table
+    // Create table for human-readable output
     const table = new Table({
       head: [
         chalk.cyan('Account ID'),
-        chalk.cyan('Provider'),
+        chalk.cyan('Region'),
         chalk.cyan('Status'),
-        chalk.cyan('Session Expires'),
+        chalk.cyan('Expires'),
         chalk.cyan('Last Used'),
         chalk.cyan('Requests'),
+        chalk.cyan('Priority'),
       ],
-      colWidths: [25, 15, 15, 25, 20, 12],
+      colWidths: [20, 15, 15, 20, 20, 12, 10],
     });
 
     // Add rows
-    for (const account of config.accounts) {
-      let providerText = '';
-      let statusText = '';
-      let expiresText = '';
+    for (const account of kiroAccounts) {
+      // Check token expiry
+      const expiresAt = new Date(account.expiresAt);
+      const now = new Date();
+      const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+      const minutesUntilExpiry = Math.floor(timeUntilExpiry / 60000);
 
-      if (account.provider === 'anthropic') {
-        providerText = 'Anthropic';
+      let statusText: string;
+      let expiresText: string;
+
+      if (timeUntilExpiry <= 0) {
+        statusText = chalk.red('✗ Expired');
+        expiresText = chalk.red('Expired');
+      } else if (timeUntilExpiry < 5 * 60 * 1000) {
+        statusText = chalk.yellow('⚠ Expiring');
+        expiresText = chalk.yellow(`${minutesUntilExpiry}m`);
+      } else if (timeUntilExpiry < 60 * 60 * 1000) {
         statusText = chalk.green('✓ Active');
-        expiresText = 'N/A';
-      } else if (account.provider === 'proxy') {
-        providerText = 'Proxy';
+        expiresText = chalk.yellow(`${minutesUntilExpiry}m`);
+      } else {
         statusText = chalk.green('✓ Active');
-        expiresText = 'N/A';
-      } else if (account.provider === 'kiro') {
-        providerText = 'OAuth';
-        const status = statuses.find((s) => s.accountId === account.id);
-        statusText = status?.isValid
-          ? chalk.green('✓ Active')
-          : status?.needsRefresh
-          ? chalk.yellow('⚠ Expiring')
-          : chalk.red('✗ Expired');
-        expiresText = status?.expiresIn || 'Unknown';
+        const hoursUntilExpiry = Math.floor(timeUntilExpiry / 3600000);
+        expiresText = chalk.green(`${hoursUntilExpiry}h`);
+      }
+
+      // Check for errors
+      if (account.errorCount > 0) {
+        statusText = chalk.red(`✗ Errors (${account.errorCount})`);
       }
 
       const lastUsedText = account.lastUsed
@@ -428,25 +136,41 @@ export async function accountListCommand(): Promise<void> {
 
       table.push([
         account.id,
-        providerText,
+        account.region,
         statusText,
         expiresText,
         lastUsedText,
         account.requestCount?.toString() || '0',
+        account.priority?.toString() || '0',
       ]);
     }
 
-    console.log(chalk.blue.bold('\n📋 Accounts\n'));
+    console.log(chalk.blue.bold('\n📋 Kiro OAuth Accounts\n'));
     console.log(table.toString());
-    console.log(chalk.gray(`\nTotal: ${config.accounts.length} account(s)`));
-    
-    // Add note for proxy accounts
-    const proxyAccounts = config.accounts.filter(a => a.provider === 'proxy');
-    if (proxyAccounts.length > 0) {
-      console.log(chalk.yellow('\n⚠ Note: Proxy accounts must return raw Anthropic format (NOT OpenAI format like 9router)'));
+    console.log(chalk.gray(`\nTotal: ${kiroAccounts.length} account(s)`));
+
+    // Show warnings for expired/expiring accounts
+    const expiredAccounts = kiroAccounts.filter(a => {
+      const expiresAt = new Date(a.expiresAt);
+      return expiresAt.getTime() <= Date.now();
+    });
+
+    const expiringAccounts = kiroAccounts.filter(a => {
+      const expiresAt = new Date(a.expiresAt);
+      const timeUntilExpiry = expiresAt.getTime() - Date.now();
+      return timeUntilExpiry > 0 && timeUntilExpiry < 5 * 60 * 1000;
+    });
+
+    if (expiredAccounts.length > 0) {
+      console.log(chalk.red(`\n⚠ ${expiredAccounts.length} account(s) expired`));
+      console.log(chalk.gray('Run: claudeflow account refresh <account-id>'));
     }
 
-    await redisClient.disconnect();
+    if (expiringAccounts.length > 0) {
+      console.log(chalk.yellow(`\n⚠ ${expiringAccounts.length} account(s) expiring soon`));
+      console.log(chalk.gray('Tokens will auto-refresh if daemon is running'));
+    }
+
     logger.info('Account list command completed successfully');
   } catch (error) {
     logger.error('Account list command failed', error);
@@ -456,156 +180,312 @@ export async function accountListCommand(): Promise<void> {
 }
 
 /**
- * Account show command
+ * Account remove command
+ * 
+ * Removes account from config AND deletes credentials from keychain
  */
-export async function accountShowCommand(accountId: string): Promise<void> {
+export async function accountRemoveCommand(accountId: string): Promise<void> {
   try {
-    logger.info('Starting account show command', { accountId });
+    logger.info('Starting account remove command', { accountId });
+
+    // Validate account ID format
+    validateAccountId(accountId);
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
 
-    const config = await configService.getConfig();
+    const config = configManager.getConfig();
 
-    // Find account
-    const account = config.accounts.find((a) => a.id === accountId);
+    // Check if account exists
+    const account = config.accounts.find(a => a.id === accountId);
     if (!account) {
       console.error(chalk.red(`✗ Account '${accountId}' not found`));
       process.exit(1);
     }
 
-    // Display account details
-    console.log(chalk.blue.bold(`\n📄 Account Details: ${accountId}\n`));
-    console.log(chalk.gray('─'.repeat(60)));
-
-    console.log(chalk.bold('Basic Information:'));
-    console.log(`  Account ID:     ${account.id}`);
-    console.log(`  Provider:       ${account.provider === 'anthropic' ? 'Direct Anthropic' : account.provider === 'proxy' ? 'Proxy' : 'OAuth'}`);
-
-    // Display provider-specific information
-    if (account.provider === 'anthropic') {
-      console.log(`  API Key:        ${account.apiKey.slice(0, 10)}...${account.apiKey.slice(-4)}`);
-      
-      console.log(chalk.bold('\nUsage Statistics:'));
-      console.log(`  Last Used:      ${account.lastUsed ? new Date(account.lastUsed).toLocaleString() : 'Never'}`);
-      console.log(`  Request Count:  ${account.requestCount || 0}`);
-
-      console.log(chalk.gray('─'.repeat(60)));
-    } else if (account.provider === 'proxy') {
-      console.log(`  Base URL:       ${account.baseURL}`);
-      console.log(`  API Key:        ${account.apiKey.slice(0, 10)}...${account.apiKey.slice(-4)}`);
-      
-      console.log(chalk.bold('\nUsage Statistics:'));
-      console.log(`  Last Used:      ${account.lastUsed ? new Date(account.lastUsed).toLocaleString() : 'Never'}`);
-      console.log(`  Request Count:  ${account.requestCount || 0}`);
-
-      console.log(chalk.gray('─'.repeat(60)));
-    } else if (account.provider === 'kiro') {
-      console.log(`  Machine ID:     ${account.kiroConfig.machineId}`);
-      console.log(`  OAuth Router:   ${account.kiroConfig.mitmRouterUrl}`);
-
-      // Initialize auth service to get session status for OAuth accounts
-      const redisClient = new RedisClientWrapper({ url: config.infrastructure.redisUrl });
-      await redisClient.connect();
-
-      const authService = new AuthService(configService, redisClient);
-      await authService.initialize();
-
-      const status = await authService.getSessionStatus(accountId);
-
-      console.log(chalk.bold('\nSession Information:'));
-      const statusText = status.isValid
-        ? chalk.green('✓ Active')
-        : status.needsRefresh
-        ? chalk.yellow('⚠ Expiring Soon')
-        : chalk.red('✗ Expired');
-      console.log(`  Status:         ${statusText}`);
-      console.log(`  Expires:        ${status.expiresAt?.toLocaleString() || 'Unknown'}`);
-      console.log(`  Expires In:     ${status.expiresIn || 'Unknown'}`);
-      console.log(`  Needs Refresh:  ${status.needsRefresh ? chalk.yellow('Yes') : chalk.green('No')}`);
-
-      console.log(chalk.bold('\nUsage Statistics:'));
-      console.log(`  Last Used:      ${account.lastUsed ? new Date(account.lastUsed).toLocaleString() : 'Never'}`);
-      console.log(`  Request Count:  ${account.requestCount || 0}`);
-
-      console.log(chalk.gray('─'.repeat(60)));
-
-      if (status.needsRefresh) {
-        console.log(chalk.yellow('\n⚠ Session needs refresh. Run: claudeflow account refresh ' + accountId));
-      }
-
-      await redisClient.disconnect();
+    // Check if it's a kiro-oauth account
+    if (account.provider !== 'kiro-oauth') {
+      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
+      console.log(chalk.gray(`This account has provider: ${account.provider}`));
+      process.exit(1);
     }
 
-    logger.info('Account show command completed successfully', { accountId });
+    // Confirm removal
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: `Are you sure you want to remove account '${accountId}'?`,
+        default: false,
+      },
+    ]);
+
+    if (!confirm) {
+      console.log(chalk.yellow('✗ Account removal cancelled'));
+      return;
+    }
+
+    const spinner = ora('Removing account...').start();
+
+    try {
+      // Delete credentials from keychain
+      await keychainStore.delete(accountId);
+
+      // Remove from config
+      config.accounts = config.accounts.filter(a => a.id !== accountId);
+      configManager.saveConfig(config);
+
+      spinner.succeed('Account removed successfully');
+
+      console.log(chalk.green(`\n✓ Account '${accountId}' removed`));
+      console.log(chalk.gray('  • Credentials deleted from keychain'));
+      console.log(chalk.gray('  • Account removed from config'));
+
+      // Log security event
+      logSecurityEvent('account-remove', accountId, 'success');
+
+      logger.info('Account remove command completed successfully', { accountId });
+    } catch (error) {
+      spinner.fail('Failed to remove account');
+      throw error;
+    }
   } catch (error) {
-    logger.error('Account show command failed', error);
+    logger.error('Account remove command failed', error);
     console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
+
+    // Log security event
+    logSecurityEvent('account-remove', accountId, 'failure', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
     process.exit(1);
   }
 }
 
 /**
  * Account refresh command
- * Only works for OAuth accounts
+ * 
+ * Manually refresh token for a Kiro OAuth account
  */
 export async function accountRefreshCommand(accountId: string): Promise<void> {
   try {
     logger.info('Starting account refresh command', { accountId });
 
-    // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    // Validate account ID format
+    validateAccountId(accountId);
 
-    const config = await configService.getConfig();
+    // Initialize services
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
+    const dualAuthModeHandler = new DualAuthModeHandler();
+    const tokenManager = new TokenManager(keychainStore, dualAuthModeHandler, configManager);
+
+    const config = configManager.getConfig();
 
     // Check if account exists
-    const account = await configService.getAccount(accountId);
+    const account = config.accounts.find(a => a.id === accountId) as KiroOAuthAccount | undefined;
     if (!account) {
       console.error(chalk.red(`✗ Account '${accountId}' not found`));
       process.exit(1);
     }
 
-    // Check if account is OAuth type
-    if (account.provider !== 'kiro') {
-      console.error(chalk.red(`✗ Account '${accountId}' is not an OAuth account`));
-      console.log(chalk.yellow('\nSession refresh is only available for OAuth accounts.'));
-      console.log(chalk.gray(`This account is a ${account.provider === 'anthropic' ? 'Direct Anthropic' : 'Proxy'} account and does not use sessions.`));
+    // Check if it's a kiro-oauth account
+    if (account.provider !== 'kiro-oauth') {
+      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
+      console.log(chalk.gray(`This account has provider: ${account.provider}`));
+      console.log(chalk.gray('Token refresh is only available for Kiro OAuth accounts.'));
       process.exit(1);
     }
 
-    // Initialize auth service
-    const redisClient = new RedisClientWrapper({ url: config.infrastructure.redisUrl });
-    await redisClient.connect();
-
-    const authService = new AuthService(configService, redisClient);
-    await authService.initialize();
-
-    // Refresh session
-    const spinner = ora('Refreshing session...').start();
+    // Refresh token
+    const spinner = ora('Refreshing token...').start();
 
     try {
-      const session = await authService.refreshSession(accountId);
+      const result = await tokenManager.refresh(accountId);
 
-      spinner.succeed('Session refreshed successfully!');
+      spinner.succeed('Token refreshed successfully!');
 
-      console.log(chalk.green('\n✓ Session refreshed successfully!'));
-      console.log(chalk.blue('\nSession Details:'));
-      console.log(chalk.gray('─'.repeat(50)));
+      // Update config with new expiry time
+      account.expiresAt = result.expiresAt.toISOString();
+      account.lastUsed = Date.now();
+      configManager.saveConfig(config);
+
+      console.log(chalk.green('\n✓ Token refreshed successfully!'));
+      console.log(chalk.blue('\nToken Details:'));
+      console.log(chalk.gray('─'.repeat(60)));
       console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-      console.log(`${chalk.bold('New Expiry:')} ${session.expiresAt.toLocaleString()}`);
-      console.log(chalk.gray('─'.repeat(50)));
+      console.log(`${chalk.bold('New Expiry:')} ${result.expiresAt.toLocaleString()}`);
+      console.log(`${chalk.bold('Access Token:')} ${sanitizeToken(result.accessToken)}`);
+      console.log(chalk.gray('─'.repeat(60)));
 
-      await redisClient.disconnect();
+      // Log security event
+      logSecurityEvent('token-refresh', accountId, 'success');
+
       logger.info('Account refresh command completed successfully', { accountId });
     } catch (error) {
-      spinner.fail('Session refresh failed');
-      await redisClient.disconnect();
+      spinner.fail('Token refresh failed');
+
+      if (error instanceof Error && error.message.includes('401')) {
+        console.error(chalk.red('\n✗ Authentication failed'));
+        console.log(chalk.yellow('\nYour refresh token has expired or is invalid.'));
+        console.log(chalk.gray('Please login again: claudeflow login'));
+      }
+
+      // Log security event
+      logSecurityEvent('token-refresh', accountId, 'failure', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       throw error;
     }
   } catch (error) {
     logger.error('Account refresh command failed', error);
+    console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+/**
+ * Account test command
+ * 
+ * Test account connectivity with a minimal API call
+ */
+export async function accountTestCommand(accountId: string): Promise<void> {
+  try {
+    logger.info('Starting account test command', { accountId });
+
+    // Validate account ID format
+    validateAccountId(accountId);
+
+    // Initialize services
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
+    const kiroAPIClient = new KiroAPIClient();
+
+    const config = configManager.getConfig();
+
+    // Check if account exists
+    const account = config.accounts.find(a => a.id === accountId) as KiroOAuthAccount | undefined;
+    if (!account) {
+      console.error(chalk.red(`✗ Account '${accountId}' not found`));
+      process.exit(1);
+    }
+
+    // Check if it's a kiro-oauth account
+    if (account.provider !== 'kiro-oauth') {
+      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
+      console.log(chalk.gray(`This account has provider: ${account.provider}`));
+      process.exit(1);
+    }
+
+    // Retrieve credentials
+    const credentials = await keychainStore.retrieve(accountId);
+    if (!credentials) {
+      console.error(chalk.red(`✗ No credentials found for account '${accountId}'`));
+      console.log(chalk.gray('Please login again: claudeflow login'));
+      process.exit(1);
+    }
+
+    // Build API config
+    const apiConfig: KiroAPIConfig = {
+      region: account.region,
+      timeout: {
+        connect: 10000,
+        read: 60000,
+      },
+      retries: 3,
+    };
+
+    // Test connectivity
+    const spinner = ora('Testing account connectivity...').start();
+
+    try {
+      const startTime = Date.now();
+      const isHealthy = await kiroAPIClient.healthCheck(credentials.accessToken, apiConfig);
+      const responseTime = Date.now() - startTime;
+
+      if (isHealthy) {
+        spinner.succeed('Account is healthy!');
+
+        console.log(chalk.green('\n✓ Account connectivity test passed'));
+        console.log(chalk.blue('\nTest Results:'));
+        console.log(chalk.gray('─'.repeat(60)));
+        console.log(`${chalk.bold('Account ID:')} ${accountId}`);
+        console.log(`${chalk.bold('Region:')} ${account.region}`);
+        console.log(`${chalk.bold('Response Time:')} ${responseTime}ms`);
+        console.log(`${chalk.bold('Status:')} ${chalk.green('Healthy')}`);
+        console.log(chalk.gray('─'.repeat(60)));
+      } else {
+        spinner.fail('Account is unhealthy');
+
+        console.log(chalk.red('\n✗ Account connectivity test failed'));
+        console.log(chalk.yellow('\nPossible causes:'));
+        console.log(chalk.yellow('  • Token expired or invalid'));
+        console.log(chalk.yellow('  • Network connectivity issues'));
+        console.log(chalk.yellow('  • Kiro API is down'));
+        
+        process.exit(1);
+      }
+
+      logger.info('Account test command completed successfully', { accountId, responseTime });
+    } catch (error) {
+      spinner.fail('Connectivity test failed');
+      throw error;
+    }
+  } catch (error) {
+    logger.error('Account test command failed', error);
+    console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+/**
+ * Account set-priority command
+ * 
+ * Update routing priority for an account
+ */
+export async function accountSetPriorityCommand(accountId: string, priority: number): Promise<void> {
+  try {
+    logger.info('Starting account set-priority command', { accountId, priority });
+
+    // Validate account ID format
+    validateAccountId(accountId);
+
+    // Validate priority value
+    validatePriority(priority);
+
+    // Initialize services
+    const configManager = new ConfigurationManager();
+    const config = configManager.getConfig();
+
+    // Check if account exists
+    const account = config.accounts.find(a => a.id === accountId) as KiroOAuthAccount | undefined;
+    if (!account) {
+      console.error(chalk.red(`✗ Account '${accountId}' not found`));
+      process.exit(1);
+    }
+
+    // Check if it's a kiro-oauth account
+    if (account.provider !== 'kiro-oauth') {
+      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
+      console.log(chalk.gray(`This account has provider: ${account.provider}`));
+      process.exit(1);
+    }
+
+    // Update priority
+    const oldPriority = account.priority || 0;
+    account.priority = priority;
+    configManager.saveConfig(config);
+
+    console.log(chalk.green(`\n✓ Priority updated for account '${accountId}'`));
+    console.log(chalk.gray(`  Old priority: ${oldPriority}`));
+    console.log(chalk.gray(`  New priority: ${priority}`));
+    console.log(chalk.gray('\nHigher priority accounts are preferred for routing.'));
+
+    logger.info('Account set-priority command completed successfully', { accountId, oldPriority, priority });
+  } catch (error) {
+    logger.error('Account set-priority command failed', error);
     console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }

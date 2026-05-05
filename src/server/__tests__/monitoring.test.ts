@@ -22,6 +22,14 @@ describe('Monitoring Endpoints', () => {
     // Create analytics engine
     analyticsEngine = new AnalyticsEngine(redis);
     
+    // Create mock KeychainStore
+    const mockKeychainStore = {
+      store: jest.fn().mockResolvedValue(undefined),
+      retrieve: jest.fn().mockResolvedValue(null),
+      delete: jest.fn().mockResolvedValue(undefined),
+      exists: jest.fn().mockResolvedValue(false),
+    } as any;
+
     // Create mock infrastructure with proper wrappers
     const infrastructure: InfrastructureClients = {
       redis: {
@@ -41,6 +49,7 @@ describe('Monitoring Endpoints', () => {
         healthCheck: async () => true,
         getClient: () => ({} as any),
       } as any,
+      keychain: mockKeychainStore,
     };
     
     // Create mock config

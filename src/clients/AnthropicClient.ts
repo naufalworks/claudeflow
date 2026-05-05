@@ -82,9 +82,14 @@ export class AnthropicClient {
 
       // CRITICAL: Validate response is in raw Anthropic format
       if (!this.validator.isAnthropicFormat(response.data)) {
+        // Get detailed validation errors
+        const validationResult = this.validator.validateDetailed(response.data);
+
         throw new AnthropicClientError(
-          'Response from Anthropic API is not in expected raw Anthropic format. ' +
-          'This should never happen with direct Anthropic API calls.',
+          `❌ UNEXPECTED: Response from Anthropic API is not in expected raw Anthropic format.\n` +
+          `This should never happen with direct Anthropic API calls.\n\n` +
+          `Validation errors:\n${validationResult.errors.map(e => `  • ${e}`).join('\n')}\n\n` +
+          `Please report this issue to ClaudeFlow maintainers.`,
           response.status,
           false
         );

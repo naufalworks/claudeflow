@@ -2,14 +2,16 @@
  * Health Command
  * 
  * Check system health and run diagnostics
+ * Integrates with HealthMonitor for per-account health status
  */
 
 import chalk from 'chalk';
 import ora from 'ora';
 import Table from 'cli-table3';
 import { HealthService } from '../services/health-service.js';
-import { ConfigService } from '../services/config-service.js';
+import { ConfigurationManager } from '../../config/manager.js';
 import { logger } from '../utils/logger.js';
+import type { KiroOAuthAccount } from '../../config/schema.js';
 
 /**
  * Format response time
@@ -32,20 +34,19 @@ export async function healthCheckCommand(): Promise<void> {
     logger.info('Starting health check command');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
-
-    const config = await configService.getConfig();
+    const configManager = new ConfigurationManager();
     const healthService = new HealthService();
+
+    const config = configManager.getConfig();
 
     // Run health checks
     const spinner = ora('Checking system health...').start();
 
     const result = await healthService.checkAll(
       config.accounts,
-      config.infrastructure.qdrantUrl,
-      config.infrastructure.redisUrl,
-      config.infrastructure.voyageApiKey
+      config.infrastructure.qdrant.url,
+      config.infrastructure.redis.url,
+      config.infrastructure.voyage.apiKey
     );
 
     spinner.stop();
@@ -53,8 +54,8 @@ export async function healthCheckCommand(): Promise<void> {
     // Display results
     console.log(chalk.blue.bold('\n🏥 System Health Check\n'));
 
-    // Create status table
-    const table = new Table({
+    // Create status table for infrastructure
+    const infraTable = new Table({
       head: [
         chalk.cyan('Component'),
         chalk.cyan('Status'),
@@ -77,10 +78,87 @@ export async function healthCheckCommand(): Promise<void> {
         ? JSON.stringify(component.details)
         : component.message;
 
-      table.push([component.name, status, responseTime, details]);
+      infraTable.push([component.name, status, responseTime, details]);
     }
 
-    console.log(table.toString());
+    console.log(chalk.bold('Infrastructure Status:'));
+    console.log(infraTable.toString());
+
+    // Check per-account health for Kiro OAuth accounts
+    const kiroAccounts = config.accounts.filter(
+      a => a.provider === 'kiro-oauth'
+    ) as KiroOAuthAccount[];
+
+    if (kiroAccounts.length > 0) {
+      console.log(chalk.bold('\nAccount Health Status:'));
+
+      // Create account health table
+      const accountTable = new Table({
+        head: [
+          chalk.cyan('Account ID'),
+          chalk.cyan('Region'),
+          chalk.cyan('Status'),
+          chalk.cyan('Token Expiry'),
+          chalk.cyan('Error Count'),
+        ],
+        colWidths: [20, 15, 15, 20, 15],
+      });
+
+      for (const account of kiroAccounts) {
+        // Check token expiry
+        const expiresAt = new Date(account.expiresAt);
+        const now = new Date();
+        const isExpired = expiresAt.getTime() <= now.getTime();
+        const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+        const isExpiring = timeUntilExpiry > 0 && timeUntilExpiry < 5 * 60 * 1000;
+
+        let statusText: string;
+        if (isExpired) {
+          statusText = chalk.red('✗ Expired');
+        } else if (isExpiring) {
+          statusText = chalk.yellow('⚠ Expiring');
+        } else if (account.errorCount > 0) {
+          statusText = chalk.red(`✗ Errors (${account.errorCount})`);
+        } else {
+          statusText = chalk.green('✓ Healthy');
+        }
+
+        const expiryText = isExpired
+          ? chalk.red('Expired')
+          : isExpiring
+          ? chalk.yellow(`${Math.floor(timeUntilExpiry / 60000)}m`)
+          : chalk.green(`${Math.floor(timeUntilExpiry / 3600000)}h`);
+
+        const errorsText = account.errorCount > 0
+          ? chalk.red(account.errorCount.toString())
+          : chalk.green('0');
+
+        accountTable.push([
+          account.id,
+          account.region,
+          statusText,
+          expiryText,
+          errorsText,
+        ]);
+      }
+
+      console.log(accountTable.toString());
+
+      // Show unhealthy account details
+      const unhealthyAccounts = kiroAccounts.filter(
+        a => {
+          const expiresAt = new Date(a.expiresAt);
+          const isExpired = expiresAt.getTime() <= Date.now();
+          return isExpired || a.errorCount > 0;
+        }
+      );
+
+      if (unhealthyAccounts.length > 0) {
+        console.log(chalk.red(`\n⚠ ${unhealthyAccounts.length} unhealthy account(s) detected`));
+        console.log(chalk.gray('Unhealthy accounts will not be used for routing.'));
+        console.log(chalk.gray('Run: claudeflow account refresh <account-id> to fix.'));
+      }
+    }
 
     // Overall status
     console.log();
@@ -115,14 +193,12 @@ export async function healthTestCommand(): Promise<void> {
     logger.info('Starting health test command (E2E)');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
-
-    const config = await configService.getConfig();
+    const configManager = new ConfigurationManager();
+    const config = configManager.getConfig();
     const healthService = new HealthService();
 
     // Build daemon URL
-    const daemonUrl = `http://${config.daemon.host}:${config.daemon.port}`;
+    const daemonUrl = `http://${config.server.host}:${config.server.port}`;
 
     // Run E2E test
     const spinner = ora('Running end-to-end test...').start();
@@ -132,7 +208,7 @@ export async function healthTestCommand(): Promise<void> {
     spinner.stop();
 
     // Display results
-    console.log(chalk.blue.bold('\n🧪 End-to-End Test\n'));
+    console.log(chalk.blue.bold('\n�� End-to-End Test\n'));
 
     if (result.success) {
       console.log(chalk.green('✓ Test passed'));
@@ -159,7 +235,7 @@ export async function healthTestCommand(): Promise<void> {
       
       console.log(chalk.yellow('\n⚠ Possible issues:'));
       console.log(chalk.gray('  • Daemon is not running (start with: claudeflow daemon start)'));
-      console.log(chalk.gray('  • No accounts configured (add with: claudeflow account add)'));
+      console.log(chalk.gray('  • No accounts configured (add with: claudeflow login)'));
       console.log(chalk.gray('  • Infrastructure services are down (check with: claudeflow health)'));
     }
 

@@ -15,11 +15,12 @@ import type { Account } from '../config/schema';
 import { AnthropicAuthStrategy } from './strategies/AnthropicAuthStrategy.js';
 import { ProxyAuthStrategy } from './strategies/ProxyAuthStrategy.js';
 import { OAuthAuthStrategy } from './strategies/OAuthAuthStrategy.js';
+import { KiroOAuthAuthStrategy } from './strategies/KiroOAuthAuthStrategy.js';
 
 /**
  * Valid account provider types
  */
-const VALID_PROVIDERS = ['anthropic', 'proxy', 'kiro'] as const;
+const VALID_PROVIDERS = ['anthropic', 'proxy', 'kiro', 'kiro-oauth'] as const;
 
 /**
  * Authentication manager using Strategy Pattern
@@ -28,11 +29,12 @@ export class AuthManager {
   private strategies: Map<string, AuthStrategy>;
 
   constructor() {
-    // Initialize strategy map with all three strategies
+    // Initialize strategy map with all four strategies
     this.strategies = new Map<string, AuthStrategy>([
       ['anthropic', new AnthropicAuthStrategy()],
       ['proxy', new ProxyAuthStrategy()],
       ['kiro', new OAuthAuthStrategy()],
+      ['kiro-oauth', new KiroOAuthAuthStrategy()],
     ]);
   }
 
@@ -112,7 +114,7 @@ export class AuthManager {
    * @param account - Account to check
    * @returns True if session needs refresh
    */
-  needsRefresh(account: Account): boolean {
+  async needsRefresh(account: Account): Promise<boolean> {
     // Validate provider
     if (!this.isValidProvider(account.provider)) {
       return false;
@@ -125,7 +127,10 @@ export class AuthManager {
       return false;
     }
 
-    return strategy.needsRefresh(account);
+    const result = strategy.needsRefresh(account);
+    
+    // Handle both sync and async needsRefresh implementations
+    return result instanceof Promise ? await result : result;
   }
 
   /**

@@ -74,5 +74,5 @@ export interface AuthStrategy {
    * @param account - Account to check
    * @returns True if session needs refresh
    */
-  needsRefresh?(account: Account): boolean;
+  needsRefresh?(account: Account): boolean | Promise<boolean>;
 }

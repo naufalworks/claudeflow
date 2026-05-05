@@ -15,9 +15,18 @@ async function main() {
     // Initialize infrastructure
     // Find first Anthropic or Proxy account for infrastructure initialization
     const firstAccount = config.accounts[0];
+    // Only accounts with apiKey (not kiro-oauth which uses keychain)
+    const accountWithApiKey = firstAccount.provider === 'kiro-oauth' 
+      ? config.accounts.find(a => a.provider !== 'kiro-oauth' && 'apiKey' in a)
+      : firstAccount;
+    
+    if (!accountWithApiKey || !('apiKey' in accountWithApiKey)) {
+      throw new Error('No account with apiKey found for infrastructure initialization. Add an Anthropic or Proxy account.');
+    }
+    
     const anthropicConfig = {
-      apiKey: firstAccount.apiKey,
-      baseURL: firstAccount.provider === 'proxy' ? firstAccount.baseURL : undefined,
+      apiKey: accountWithApiKey.apiKey,
+      baseURL: accountWithApiKey.provider === 'proxy' ? accountWithApiKey.baseURL : undefined,
     };
     
     const infrastructure = await initializeInfrastructure({

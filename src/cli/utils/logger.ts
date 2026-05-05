@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import chalk from 'chalk';
+import { LogSanitizer } from '../../utils/log-sanitizer.js';
 
 /**
  * Log Level
@@ -151,53 +152,16 @@ export class Logger {
 
   /**
    * Mask sensitive data in logs
+   * 
+   * Delegates to LogSanitizer for comprehensive sanitization.
    */
   private maskSensitiveData(data: any): any {
     if (typeof data === 'string') {
-      // Mask API keys (keep first 4 and last 4 characters)
-      data = data.replace(
-        /\b(sk-ant-api03-[a-zA-Z0-9_-]{8})[a-zA-Z0-9_-]+([a-zA-Z0-9_-]{4})\b/g,
-        '$1****$2'
-      );
-
-      // Mask session tokens
-      data = data.replace(
-        /\b(sess_[a-zA-Z0-9]{8})[a-zA-Z0-9]+([a-zA-Z0-9]{4})\b/g,
-        '$1****$2'
-      );
-
-      // Mask generic tokens
-      data = data.replace(
-        /\b(token["\s:=]+)([a-zA-Z0-9_-]{8})[a-zA-Z0-9_-]+([a-zA-Z0-9_-]{4})\b/gi,
-        '$1$2****$3'
-      );
-
-      return data;
+      return LogSanitizer.sanitize(data);
     }
 
     if (typeof data === 'object' && data !== null) {
-      const masked: any = Array.isArray(data) ? [] : {};
-
-      for (const [key, value] of Object.entries(data)) {
-        // Mask sensitive keys
-        if (
-          key.toLowerCase().includes('apikey') ||
-          key.toLowerCase().includes('api_key') ||
-          key.toLowerCase().includes('token') ||
-          key.toLowerCase().includes('password') ||
-          key.toLowerCase().includes('secret')
-        ) {
-          if (typeof value === 'string' && value.length > 8) {
-            masked[key] = `${value.substring(0, 4)}****${value.substring(value.length - 4)}`;
-          } else {
-            masked[key] = '****';
-          }
-        } else {
-          masked[key] = this.maskSensitiveData(value);
-        }
-      }
-
-      return masked;
+      return LogSanitizer.sanitizeObject(data);
     }
 
     return data;

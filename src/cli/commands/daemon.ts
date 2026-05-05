@@ -46,9 +46,9 @@ function formatUptime(ms: number): string {
 /**
  * Daemon start command
  */
-export async function daemonStartCommand(): Promise<void> {
+export async function daemonStartCommand(options: { mitm?: boolean } = {}): Promise<void> {
   try {
-    logger.info('Starting daemon start command');
+    logger.info('Starting daemon start command', { mitm: options.mitm });
 
     // Initialize services
     const configService = new ConfigService();
@@ -68,6 +68,15 @@ export async function daemonStartCommand(): Promise<void> {
       await daemonService.start();
       spinner.succeed('Daemon started successfully!');
 
+      // If MITM flag is set, start MITM proxy
+      if (options.mitm) {
+        console.log(chalk.blue('\n🔒 Starting MITM proxy...'));
+
+        // Import MITM command dynamically
+        const { mitmStartCommand } = await import('./mitm.js');
+        await mitmStartCommand({ daemon: true });
+      }
+
       // Wait a moment for daemon to initialize
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -81,12 +90,18 @@ export async function daemonStartCommand(): Promise<void> {
       console.log(`${chalk.bold('Status:')} ${chalk.green(status.status || 'online')}`);
       console.log(`${chalk.bold('Port:')} ${config.daemon.port}`);
       console.log(`${chalk.bold('Host:')} ${config.daemon.host}`);
+      if (options.mitm) {
+        console.log(`${chalk.bold('MITM Proxy:')} ${chalk.green('Running on port 443')}`);
+      }
       console.log(chalk.gray('─'.repeat(50)));
 
       console.log(chalk.gray('\nNext steps:'));
       console.log(chalk.gray('  • Check status: claudeflow daemon status'));
       console.log(chalk.gray('  • View logs: claudeflow logs'));
       console.log(chalk.gray('  • Check health: claudeflow health'));
+      if (options.mitm) {
+        console.log(chalk.gray('  • Check MITM status: claudeflow mitm status'));
+      }
 
       logger.info('Daemon start command completed successfully');
     } catch (error) {

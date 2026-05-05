@@ -15,6 +15,7 @@ import type {
   KiroComboConfig,
   ValidationResult,
 } from '../types/cli.types.js';
+import { safeStringify } from '../../config/secure-serializer.js';
 
 /**
  * Configuration Schema for validation
@@ -202,8 +203,11 @@ export class ConfigService {
     // Ensure directory exists
     await this.initialize();
 
+    // Securely serialize config (strips sensitive fields)
+    const safeJson = safeStringify(config, true);
+
     // Write config file with proper permissions
-    await writeFile(this.configPath, JSON.stringify(config, null, 2), {
+    await writeFile(this.configPath, safeJson, {
       mode: 0o600,
     });
 
@@ -273,8 +277,11 @@ export class ConfigService {
       await mkdir(this.profilesDir, { recursive: true, mode: 0o700 });
     }
 
+    // Securely serialize config (strips sensitive fields)
+    const safeJson = safeStringify(config, true);
+
     const profilePath = join(this.profilesDir, `${name}.json`);
-    await writeFile(profilePath, JSON.stringify(config, null, 2), {
+    await writeFile(profilePath, safeJson, {
       mode: 0o600,
     });
   }

@@ -2,6 +2,7 @@ import { readFile, watch } from 'fs/promises';
 import { existsSync } from 'fs';
 import { Config, ConfigSchema, defaultConfig } from './schema.js';
 import { config as dotenvConfig } from 'dotenv';
+import { normalizeKeys } from './field-mapper.js';
 
 export class ConfigurationManager {
   private config: Config;
@@ -25,7 +26,9 @@ export class ConfigurationManager {
     if (this.configPath && existsSync(this.configPath)) {
       try {
         const fileContent = await readFile(this.configPath, 'utf-8');
-        const fileConfig = JSON.parse(fileContent) as Partial<Config>;
+        const rawConfig = JSON.parse(fileContent) as Partial<Config>;
+        // Normalize snake_case keys to camelCase for backward compatibility
+        const fileConfig = normalizeKeys<Partial<Config>>(rawConfig);
         config = this.mergeConfig(config, fileConfig);
         console.log(`✅ Loaded configuration from ${this.configPath}`);
       } catch (error) {
@@ -129,9 +132,10 @@ export class ConfigurationManager {
       
       kiroIndex++;
     }
-    
+
     if (accounts.length > 0) {
-      envConfig.accounts = accounts;
+      // Append environment accounts to existing accounts instead of replacing
+      envConfig.accounts = [...envConfig.accounts, ...accounts];
     }
 
     return envConfig;
@@ -169,6 +173,33 @@ export class ConfigurationManager {
 
   getConfig(): Config {
     return this.config;
+  }
+
+  getConfigPath(): string {
+    if (!this.configPath) {
+      throw new Error('Config path not set. Call loadConfig() first.');
+    }
+    return this.configPath;
+  }
+
+  async saveConfig(config: Config): Promise<void> {
+    // Validate configuration
+    const validationResult = ConfigSchema.safeParse(config);
+    if (!validationResult.success) {
+      throw new Error(`Invalid configuration: ${validationResult.error.message}`);
+    }
+
+    this.config = validationResult.data;
+
+    // Write to file if configPath is set
+    if (this.configPath) {
+      const { writeFile } = await import('fs/promises');
+      await writeFile(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
+      console.log(`✅ Configuration saved to ${this.configPath}`);
+    }
+
+    // Notify watchers
+    this.notifyWatchers();
   }
 
   updateConfig(updates: Partial<Config>): void {

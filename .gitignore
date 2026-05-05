@@ -37,3 +37,11 @@ coverage/
 # Config (keep example)
 config.json
 !config.example.json
+
+# Temporary documentation (prevent bloat)
+*_COMPLETE.md
+*_SUMMARY.md
+*_FIXED.md
+SESSION_*.md
+.audit/
+*.IMPLEMENTATION.md

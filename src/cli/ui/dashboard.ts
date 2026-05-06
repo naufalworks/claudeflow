@@ -231,22 +231,62 @@ export class TUIDashboard {
     // Add account
     this.screen.key(['a', 'A'], () => {
       this.screen.destroy();
-      console.log('\n🔐 Starting login process...\n');
-      // TODO: Launch login command
+      console.log('\n🔐 Add Kiro Account\n');
+      console.log('To add a new account, run:');
+      console.log('  claudeflow login');
+      console.log('\nPress any key to return to dashboard...');
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', async () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        // Restart dashboard
+        await this.start();
+      });
     });
 
     // View logs
     this.screen.key(['l', 'L'], () => {
       this.screen.destroy();
-      console.log('\n📜 Opening logs...\n');
-      // TODO: Launch logs command
+      console.log('\n📜 Logs viewer\n');
+      console.log('Available log commands:');
+      console.log('  claudeflow logs           - View all logs');
+      console.log('  claudeflow logs --follow  - Follow logs in real-time');
+      console.log('  claudeflow logs --error   - View error logs only');
+      console.log('\nPress any key to return to dashboard...');
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', async () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        // Restart dashboard
+        await this.start();
+      });
     });
 
     // MITM status
     this.screen.key(['m', 'M'], () => {
       this.screen.destroy();
-      console.log('\n🔒 Opening MITM status...\n');
-      // TODO: Launch MITM status command
+      console.log('\n🔒 MITM Proxy Status\n');
+      console.log('To check MITM status, run:');
+      console.log('  claudeflow mitm status');
+      console.log('\nTo manage MITM proxy:');
+      console.log('  claudeflow mitm install   - Install MITM proxy');
+      console.log('  claudeflow mitm start     - Start MITM proxy');
+      console.log('  claudeflow mitm stop      - Stop MITM proxy');
+      console.log('  claudeflow mitm uninstall - Uninstall MITM proxy');
+      console.log('\nPress any key to return to dashboard...');
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', async () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        // Restart dashboard
+        await this.start();
+      });
     });
   }
 
@@ -338,8 +378,9 @@ export class TUIDashboard {
         expiresText = `${hoursUntilExpiry}h`;
       }
 
-      // Calculate tokens and credits (mock data for now)
-      const tokens = (account.requestCount || 0) * 1000;
+      // Use requestCount as proxy for usage
+      // Note: Real usage is tracked when API requests are made through ClaudeFlow
+      const tokens = (account.requestCount || 0) * 1000; // Estimate: 1000 tokens per request
       const credits = this.calculateCredits(tokens);
 
       data.push([
@@ -409,7 +450,7 @@ export class TUIDashboard {
       totalRequests += account.requestCount || 0;
     }
 
-    const totalTokens = totalRequests * 1000; // Estimate
+    const totalTokens = totalRequests * 1000; // Estimate: 1000 tokens per request
     const costSaved = (totalTokens / 1000000) * 15; // $15 per 1M tokens
 
     return {

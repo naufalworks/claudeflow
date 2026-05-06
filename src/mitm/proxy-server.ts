@@ -19,6 +19,7 @@ import { KeychainStore } from '../auth/KeychainStore.js';
 import { ConfigurationManager } from '../config/manager.js';
 import type { KiroOAuthAccount } from '../config/schema.js';
 import type { KiroAPIConfig } from '../types/kiro-oauth.types.js';
+import { saveRequestUsage } from '../lib/usageDb.js';
 
 export interface ProxyServerConfig {
   port: number;
@@ -211,6 +212,25 @@ export class ProxyServer {
         credentials.accessToken,
         apiConfig
       );
+
+      // Track usage in database
+      try {
+        await saveRequestUsage({
+          accountId: account.id,
+          model: requestData.model || 'claude-sonnet-4',
+          region: apiConfig.region,
+          tokens: {
+            input_tokens: response.usage.input_tokens,
+            output_tokens: response.usage.output_tokens,
+            cache_creation_input_tokens: response.usage.cache_creation_input_tokens,
+            cache_read_input_tokens: response.usage.cache_read_input_tokens,
+          },
+          status: 'success',
+        });
+        console.log(`[MITM] ✓ Usage tracked: ${response.usage.input_tokens + response.usage.output_tokens} tokens`);
+      } catch (error) {
+        console.error('[MITM] ⚠ Failed to track usage:', error);
+      }
 
       // Return response (native Anthropic format)
       res.writeHead(200, {

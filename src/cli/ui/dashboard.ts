@@ -513,6 +513,27 @@ export class TUIDashboard {
     const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
     await this.configManager.loadConfig(configPath);
 
+    // Check if MITM is running, if not, offer to start it
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // Check if MITM proxy is running
+      const { stdout } = await execAsync('lsof -i :443 -sTCP:LISTEN 2>/dev/null || echo "not running"');
+
+      if (stdout.includes('not running')) {
+        console.log('\n⚠️  MITM proxy is not running');
+        console.log('💡 Start MITM to track usage automatically');
+        console.log('\nRun: sudo claudeflow daemon start --mitm\n');
+
+        // Wait 3 seconds before showing dashboard
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    } catch (error) {
+      // Ignore errors, just show dashboard
+    }
+
     // Initial render
     await this.refresh();
 

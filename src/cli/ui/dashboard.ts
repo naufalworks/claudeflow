@@ -15,6 +15,7 @@ import inquirer from 'inquirer';
 import { ConfigurationManager } from '../../config/manager.js';
 import type { KiroOAuthAccount } from '../../config/schema.js';
 import { KeychainStore } from '../../auth/KeychainStore.js';
+import { getAccountUsage, getTotalUsage } from '../../lib/usageDb.js';
 
 export interface DashboardStats {
   totalAccounts: number;
@@ -388,17 +389,17 @@ export class TUIDashboard {
         expiresText = `${hoursUntilExpiry}h`;
       }
 
-      // Use requestCount as proxy for usage
-      // Note: Real usage is tracked when API requests are made through ClaudeFlow
-      const tokens = (account.requestCount || 0) * 1000; // Estimate: 1000 tokens per request
-      const credits = this.calculateCredits(tokens);
+      // Fetch real usage from database
+      const usage = await getAccountUsage(account.id);
+      const tokens = usage.totalTokens;
+      const credits = `$${usage.totalCost.toFixed(2)}`;
 
       data.push([
         account.id.substring(0, 18) + '...',
         account.region,
         status,
         expiresText,
-        (account.requestCount || 0).toString(),
+        usage.requestCount.toString(),
         this.formatTokens(tokens),
         credits,
       ]);
@@ -442,7 +443,6 @@ export class TUIDashboard {
     let activeAccounts = 0;
     let expiringAccounts = 0;
     let expiredAccounts = 0;
-    let totalRequests = 0;
 
     for (const account of kiroAccounts) {
       const expiresAt = new Date(account.expiresAt);
@@ -456,23 +456,21 @@ export class TUIDashboard {
       } else {
         activeAccounts++;
       }
-
-      totalRequests += account.requestCount || 0;
     }
 
-    const totalTokens = totalRequests * 1000; // Estimate: 1000 tokens per request
-    const costSaved = (totalTokens / 1000000) * 15; // $15 per 1M tokens
+    // Get real usage from database
+    const totalUsage = await getTotalUsage();
 
     return {
       totalAccounts: kiroAccounts.length,
       activeAccounts,
       expiringAccounts,
       expiredAccounts,
-      totalRequests,
-      totalTokens,
+      totalRequests: totalUsage.totalRequests,
+      totalTokens: totalUsage.totalTokens,
       successRate: 99.8,
       avgLatency: 234,
-      costSaved,
+      costSaved: totalUsage.totalCost,
       lastRefresh: new Date(),
     };
   }
@@ -487,14 +485,6 @@ export class TUIDashboard {
       return `${(tokens / 1000).toFixed(1)}K`;
     }
     return tokens.toString();
-  }
-
-  /**
-   * Calculate credits from tokens
-   */
-  private calculateCredits(tokens: number): string {
-    const credits = (tokens / 1000000) * 15; // $15 per 1M tokens
-    return `$${credits.toFixed(2)}`;
   }
 
   /**
@@ -546,6 +536,10 @@ export class TUIDashboard {
   private async deleteAccountInteractive(): Promise<void> {
     console.clear();
     console.log('\n🗑️  Delete Kiro Account\n');
+
+    // Reload config to ensure we have latest data
+    const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+    await this.configManager.loadConfig(configPath);
 
     const config = this.configManager.getConfig();
     const kiroAccounts = config.accounts.filter(

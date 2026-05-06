@@ -11,8 +11,10 @@
 import blessed from 'blessed';
 // @ts-ignore - blessed-contrib doesn't have types
 import contrib from 'blessed-contrib';
+import inquirer from 'inquirer';
 import { ConfigurationManager } from '../../config/manager.js';
 import type { KiroOAuthAccount } from '../../config/schema.js';
+import { KeychainStore } from '../../auth/KeychainStore.js';
 
 export interface DashboardStats {
   totalAccounts: number;
@@ -31,6 +33,7 @@ export class TUIDashboard {
   private screen: blessed.Widgets.Screen;
   private grid: any;
   private configManager: ConfigurationManager;
+  private keychainStore: KeychainStore;
   private refreshInterval?: NodeJS.Timeout;
 
   // Widgets
@@ -43,6 +46,7 @@ export class TUIDashboard {
 
   constructor() {
     this.configManager = new ConfigurationManager();
+    this.keychainStore = new KeychainStore();
 
     // Create screen
     this.screen = blessed.screen({
@@ -196,7 +200,7 @@ export class TUIDashboard {
    */
   private createHelpBox(): blessed.Widgets.BoxElement {
     const help = this.grid.set(10, 0, 2, 12, blessed.box, {
-      content: '{center}[R] Refresh  [A] Add Account  [L] Logs  [M] MITM  [S] Settings  [Q] Quit{/center}',
+      content: '{center}[R] Refresh  [A] Add  [D] Delete  [L] Logs  [M] MITM  [Q] Quit{/center}',
       tags: true,
       border: {
         type: 'line',
@@ -244,6 +248,12 @@ export class TUIDashboard {
         // Restart dashboard
         await this.start();
       });
+    });
+
+    // Delete account
+    this.screen.key(['d', 'D'], async () => {
+      this.screen.destroy();
+      await this.deleteAccountInteractive();
     });
 
     // View logs
@@ -528,5 +538,106 @@ export class TUIDashboard {
       clearInterval(this.refreshInterval);
     }
     this.screen.destroy();
+  }
+
+  /**
+   * Interactive account deletion
+   */
+  private async deleteAccountInteractive(): Promise<void> {
+    console.clear();
+    console.log('\n🗑️  Delete Kiro Account\n');
+
+    const config = this.configManager.getConfig();
+    const kiroAccounts = config.accounts.filter(
+      a => a.provider === 'kiro-oauth'
+    ) as KiroOAuthAccount[];
+
+    if (kiroAccounts.length === 0) {
+      console.log('No accounts found.\n');
+      console.log('Press any key to return to dashboard...');
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', async () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        await this.start();
+      });
+      return;
+    }
+
+    // Create choices for inquirer
+    const choices = kiroAccounts.map(account => ({
+      name: `${account.id} (${account.region})`,
+      value: account.id,
+    }));
+
+    choices.push({
+      name: '← Back to dashboard',
+      value: 'cancel',
+    });
+
+    const { accountId } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'accountId',
+        message: 'Select account to delete:',
+        choices,
+      },
+    ]);
+
+    if (accountId === 'cancel') {
+      await this.start();
+      return;
+    }
+
+    // Confirm deletion
+    const { confirm } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: `Are you sure you want to delete ${accountId}?`,
+        default: false,
+      },
+    ]);
+
+    if (!confirm) {
+      console.log('\nDeletion cancelled.\n');
+      console.log('Press any key to return to dashboard...');
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.once('data', async () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        await this.start();
+      });
+      return;
+    }
+
+    // Delete from keychain
+    try {
+      await this.keychainStore.delete(accountId);
+      console.log(`✓ Deleted credentials from keychain`);
+    } catch (error) {
+      console.log(`⚠ Could not delete from keychain: ${error}`);
+    }
+
+    // Delete from config
+    const updatedAccounts = config.accounts.filter(a => a.id !== accountId);
+    config.accounts = updatedAccounts;
+
+    await this.configManager.saveConfig(config);
+
+    console.log(`✓ Deleted ${accountId} from config\n`);
+    console.log('Press any key to return to dashboard...');
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.once('data', async () => {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      await this.start();
+    });
   }
 }

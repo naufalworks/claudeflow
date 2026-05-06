@@ -68,6 +68,7 @@ async function setupCommands(program: Command): Promise<void> {
     accountRefreshCommand,
     accountTestCommand,
     accountSetPriorityCommand,
+    accountDeleteCommand,
     anthropicAddCommand,
     proxyAddCommand,
     comboCreateCommand,
@@ -238,6 +239,18 @@ async function setupCommands(program: Command): Promise<void> {
     .action(async (accountId: string, priority: string) => {
       try {
         await accountSetPriorityCommand(accountId, parseInt(priority, 10));
+      } catch (error) {
+        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
+    });
+
+  accountCmd
+    .command('delete')
+    .description('Delete a Kiro account (interactive)')
+    .action(async () => {
+      try {
+        await accountDeleteCommand();
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);

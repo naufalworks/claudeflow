@@ -14,6 +14,7 @@ export {
   accountTestCommand,
   accountSetPriorityCommand,
 } from './account.js';
+export { accountDeleteCommand } from './account-delete.js';
 export { anthropicAddCommand } from './anthropic-add.js';
 export { proxyAddCommand } from './proxy-add.js';
 export {

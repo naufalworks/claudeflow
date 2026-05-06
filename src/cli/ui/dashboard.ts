@@ -253,7 +253,12 @@ export class TUIDashboard {
 
     // Delete account
     this.screen.key(['d', 'D'], async () => {
-      this.screen.destroy();
+      // Stop the dashboard first
+      this.stop();
+
+      // Give time for screen to fully destroy
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       await this.deleteAccountInteractive();
     });
 
@@ -534,6 +539,12 @@ export class TUIDashboard {
    * Interactive account deletion
    */
   private async deleteAccountInteractive(): Promise<void> {
+    // Ensure stdin is in normal mode
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.resume();
+
     console.clear();
     console.log('\n🗑️  Delete Kiro Account\n');
 

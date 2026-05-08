@@ -309,3 +309,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 **Built with ❤️ for the Claude community**
+
+> **Note:** This project is not affiliated with or endorsed by Anthropic.

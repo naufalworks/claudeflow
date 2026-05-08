@@ -1,32 +1,35 @@
 /**
  * AuthService
- * 
+ *
  * Wrapper around KiroAuthManager for CLI operations
  */
 
 import { KiroAuthManager, type KiroSession, type KiroAccount } from '../../accounts/kiro-auth-manager.js';
 import { RedisClientWrapper } from '../../infrastructure/redis.js';
-import { ConfigService } from './config-service.js';
+import { ConfigurationManager } from '../../config/manager.js';
 import { logger } from '../utils/logger.js';
 import type { SessionStatus } from '../types/cli.types.js';
 
 /**
  * AuthService
- * 
+ *
  * Manages Kiro authentication and session refresh for CLI
  */
 export class AuthService {
   private kiroAuthManager: KiroAuthManager;
-  private configService: ConfigService;
+  private configManager: ConfigurationManager;
   private refreshWorkerInterval?: NodeJS.Timeout;
   private readonly REFRESH_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
   private readonly REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+  private configPath: string;
 
   constructor(
-    configService: ConfigService,
-    redisClient: RedisClientWrapper
+    configManager: ConfigurationManager,
+    redisClient: RedisClientWrapper,
+    configPath?: string
   ) {
-    this.configService = configService;
+    this.configManager = configManager;
+    this.configPath = configPath || `${process.env.HOME}/.claudeflow/config.json`;
     this.kiroAuthManager = new KiroAuthManager(redisClient);
   }
 
@@ -34,30 +37,28 @@ export class AuthService {
    * Initialize AuthService by loading accounts from config
    */
   async initialize(): Promise<void> {
-    const config = await this.configService.getConfig();
+    await this.configManager.loadConfig(this.configPath);
+    const config = this.configManager.getConfig();
 
     // Load only OAuth accounts into KiroAuthManager (deprecated, only for OAuth)
     for (const account of config.accounts) {
       // Only load OAuth accounts into KiroAuthManager
       if (account.provider === 'kiro') {
-        const kiroAccount: KiroAccount = {
+        const kiroAccount = account as any;
+        const kiroConfig = kiroAccount.kiroConfig || {};
+        const kiroAccountData: KiroAccount = {
           id: account.id,
-          machineId: account.kiroConfig.machineId,
-          apiKey: account.apiKey,
-          sessionToken: account.kiroConfig.sessionToken,
-          mitmRouterUrl: account.kiroConfig.mitmRouterUrl,
+          machineId: kiroConfig.machineId || '',
+          apiKey: account.apiKey || '',
+          sessionToken: kiroConfig.sessionToken || '',
+          mitmRouterUrl: kiroConfig.mitmRouterUrl || '',
           lastUsed: account.lastUsed ? new Date(account.lastUsed) : new Date(),
           requestCount: account.requestCount || 0,
-          sessionExpiry: account.kiroConfig.sessionExpiry,
+          sessionExpiry: kiroConfig.sessionExpiry,
         };
 
-        this.kiroAuthManager.addAccount(kiroAccount);
+        this.kiroAuthManager.addAccount(kiroAccountData);
       }
-    }
-
-    // Load combos into KiroAuthManager
-    for (const combo of config.combos) {
-      this.kiroAuthManager.addCombo(combo);
     }
 
     // Initialize combo states from Redis
@@ -67,13 +68,12 @@ export class AuthService {
     logger.info('AuthService initialized', {
       totalAccounts: config.accounts.length,
       oauthAccounts: oauthAccountCount,
-      comboCount: config.combos.length,
     });
   }
 
   /**
    * Authenticate Kiro account
-   * 
+   *
    * @param machineId - Machine ID
    * @param apiKey - API key
    * @param mitmRouterUrl - MITM router URL (optional, defaults to config)
@@ -84,8 +84,9 @@ export class AuthService {
     apiKey: string,
     mitmRouterUrl?: string
   ): Promise<KiroSession> {
-    const config = await this.configService.getConfig();
-    const routerUrl = mitmRouterUrl || config.infrastructure.mitmRouterUrl;
+    await this.configManager.loadConfig(this.configPath);
+    const config = this.configManager.getConfig();
+    const routerUrl = mitmRouterUrl || (config.infrastructure as any).mitmRouterUrl || '';
 
     logger.info('Authenticating Kiro account', { machineId, mitmRouterUrl: routerUrl });
 
@@ -110,7 +111,7 @@ export class AuthService {
 
   /**
    * Refresh session for account
-   * 
+   *
    * @param accountId - Account ID
    * @returns Refreshed Kiro session
    */
@@ -121,12 +122,17 @@ export class AuthService {
       const session = await this.kiroAuthManager.refreshSession(accountId);
 
       // Update config with new session token and expiry for OAuth account
-      const account = await this.configService.getAccount(accountId);
-      if (account && account.provider === 'kiro') {
-        account.kiroConfig.sessionToken = session.sessionToken;
-        account.kiroConfig.sessionExpiry = session.expiresAt;
+      await this.configManager.loadConfig(this.configPath);
+      const config = this.configManager.getConfig();
+      const accountIndex = config.accounts.findIndex(a => a.id === accountId);
+      if (accountIndex >= 0 && config.accounts[accountIndex].provider === 'kiro') {
+        const account = config.accounts[accountIndex] as any;
+        if (account.kiroConfig) {
+          account.kiroConfig.sessionToken = session.sessionToken;
+          account.kiroConfig.sessionExpiry = session.expiresAt;
+        }
         account.lastUsed = Date.now();
-        await this.configService.updateAccount(accountId, account);
+        this.configManager.saveConfig(config);
       }
 
       logger.info('Session refresh successful', {

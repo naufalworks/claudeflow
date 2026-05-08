@@ -78,12 +78,14 @@ kiro chat "Hello, Claude!"
 
 ## 📖 Documentation
 
-- **[QUICK_START.md](QUICK_START.md)** - 5-minute setup guide
-- **[MITM_PROXY_GUIDE.md](MITM_PROXY_GUIDE.md)** - Complete MITM proxy guide
-- **[ARCHITECTURE_COMPLETE.md](ARCHITECTURE_COMPLETE.md)** - Architecture diagram
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Implementation details
-- **[DEVICE_CODE_FLOW_COMPLETE.md](DEVICE_CODE_FLOW_COMPLETE.md)** - Authentication details
-- **[AUTOMATIC_TOKEN_REFRESH.md](AUTOMATIC_TOKEN_REFRESH.md)** - Token refresh details
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture overview
+- **[docs/API.md](docs/API.md)** - API reference
+- **[docs/CLI.md](docs/CLI.md)** - CLI commands
+- **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** - Configuration guide
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Deployment guide
+- **[docs/DEVELOPER.md](docs/DEVELOPER.md)** - Developer guide
+- **[docs/MITM_PROXY.md](docs/MITM_PROXY.md)** - MITM proxy guide
+- **[docs/MIGRATION.md](docs/MIGRATION.md)** - Migration guide
 
 ## 🎮 Usage
 
@@ -137,7 +139,7 @@ kiro chat "Explain this code"
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/claudeflow.git
+git clone https://github.com/naufalworks/claudeflow.git
 cd claudeflow
 
 # Install dependencies
@@ -247,7 +249,7 @@ Kiro CLI/IDE → /etc/hosts redirect → MITM Proxy (443)
                               Native Anthropic Format
 ```
 
-See [ARCHITECTURE_COMPLETE.md](ARCHITECTURE_COMPLETE.md) for detailed architecture.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 
 ## 🔒 Security
 
@@ -286,9 +288,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 📞 Support
 
-- 📖 Documentation: See docs above
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/claudeflow/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/yourusername/claudeflow/discussions)
+- 📖 Documentation: See [docs/](docs/)
+- 🐛 Issues: [GitHub Issues](https://github.com/naufalworks/claudeflow/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/naufalworks/claudeflow/discussions)
 
 ## 🎉 Why ClaudeFlow?
 
@@ -307,7 +309,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 **Built with ❤️ for the Claude community**
-
-**Date:** 2026-05-05  
-**Version:** 0.1.0  
-**Status:** ✅ PRODUCTION READY

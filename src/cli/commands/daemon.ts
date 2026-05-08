@@ -8,9 +8,10 @@ import chalk from 'chalk';
 import ora from 'ora';
 import Table from 'cli-table3';
 import { DaemonService } from '../services/daemon-service.js';
-import { ConfigService } from '../services/config-service.js';
+import { ConfigurationManager } from '../../config/manager.js';
 import { logger } from '../utils/logger.js';
 import { join } from 'path';
+import { homedir } from 'os';
 
 /**
  * Format bytes to human-readable format
@@ -51,15 +52,17 @@ export async function daemonStartCommand(options: { mitm?: boolean } = {}): Prom
     logger.info('Starting daemon start command', { mitm: options.mitm });
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const configPath = process.env.CLAUDEFLOW_CONFIG || join(homedir(), '.claudeflow', 'config.json');
+    await configManager.loadConfig(configPath);
 
-    const config = await configService.getConfig();
+    const config = configManager.getConfig();
 
     // Get script path (built ClaudeFlow server)
     const scriptPath = join(process.cwd(), 'dist', 'index.js');
+    const configDir = join(homedir(), '.claudeflow');
 
-    const daemonService = new DaemonService(scriptPath, configService.getConfigDir());
+    const daemonService = new DaemonService(scriptPath, configDir);
 
     // Start daemon
     const spinner = ora('Starting ClaudeFlow daemon...').start();
@@ -88,8 +91,8 @@ export async function daemonStartCommand(options: { mitm?: boolean } = {}): Prom
       console.log(chalk.gray('─'.repeat(50)));
       console.log(`${chalk.bold('PID:')} ${status.pid || 'N/A'}`);
       console.log(`${chalk.bold('Status:')} ${chalk.green(status.status || 'online')}`);
-      console.log(`${chalk.bold('Port:')} ${config.daemon.port}`);
-      console.log(`${chalk.bold('Host:')} ${config.daemon.host}`);
+      console.log(`${chalk.bold('Port:')} ${config.server.port}`);
+      console.log(`${chalk.bold('Host:')} ${config.server.host}`);
       if (options.mitm) {
         console.log(`${chalk.bold('MITM Proxy:')} ${chalk.green('Running on port 443')}`);
       }
@@ -135,10 +138,8 @@ export async function daemonStopCommand(): Promise<void> {
     logger.info('Starting daemon stop command');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
-
-    const daemonService = new DaemonService(undefined, configService.getConfigDir());
+    const configDir = join(homedir(), '.claudeflow');
+    const daemonService = new DaemonService(undefined, configDir);
 
     // Stop daemon
     const spinner = ora('Stopping ClaudeFlow daemon...').start();
@@ -177,12 +178,14 @@ export async function daemonRestartCommand(): Promise<void> {
     logger.info('Starting daemon restart command');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const configPath = process.env.CLAUDEFLOW_CONFIG || join(homedir(), '.claudeflow', 'config.json');
+    await configManager.loadConfig(configPath);
 
-    const config = await configService.getConfig();
+    const config = configManager.getConfig();
+    const configDir = join(homedir(), '.claudeflow');
 
-    const daemonService = new DaemonService(undefined, configService.getConfigDir());
+    const daemonService = new DaemonService(undefined, configDir);
 
     // Restart daemon
     const spinner = ora('Restarting ClaudeFlow daemon...').start();
@@ -202,7 +205,7 @@ export async function daemonRestartCommand(): Promise<void> {
       console.log(chalk.gray('─'.repeat(50)));
       console.log(`${chalk.bold('PID:')} ${status.pid || 'N/A'}`);
       console.log(`${chalk.bold('Status:')} ${chalk.green(status.status || 'online')}`);
-      console.log(`${chalk.bold('Port:')} ${config.daemon.port}`);
+      console.log(`${chalk.bold('Port:')} ${config.server.port}`);
       console.log(chalk.gray('─'.repeat(50)));
 
       logger.info('Daemon restart command completed successfully');
@@ -225,12 +228,14 @@ export async function daemonStatusCommand(): Promise<void> {
     logger.info('Starting daemon status command');
 
     // Initialize services
-    const configService = new ConfigService();
-    await configService.initialize();
+    const configManager = new ConfigurationManager();
+    const configPath = process.env.CLAUDEFLOW_CONFIG || join(homedir(), '.claudeflow', 'config.json');
+    await configManager.loadConfig(configPath);
 
-    const config = await configService.getConfig();
+    const config = configManager.getConfig();
+    const configDir = join(homedir(), '.claudeflow');
 
-    const daemonService = new DaemonService(undefined, configService.getConfigDir());
+    const daemonService = new DaemonService(undefined, configDir);
 
     // Get status
     const status = await daemonService.status();
@@ -252,10 +257,10 @@ export async function daemonStatusCommand(): Promise<void> {
       ['PID', status.pid?.toString() || 'N/A'],
       ['Uptime', status.uptime ? formatUptime(status.uptime) : 'N/A'],
       ['Memory Usage', status.memoryUsage ? formatBytes(status.memoryUsage) : 'N/A'],
-      ['Port', config.daemon.port.toString()],
-      ['Host', config.daemon.host],
-      ['Log Level', config.daemon.logLevel],
-      ['Auto Restart', config.daemon.autoRestart ? 'Enabled' : 'Disabled']
+      ['Port', config.server.port.toString()],
+      ['Host', config.server.host],
+      ['Log Level', config.server.logLevel],
+      ['Auto Restart', 'Enabled']
     );
 
     console.log(chalk.blue.bold('\n📊 Daemon Status\n'));

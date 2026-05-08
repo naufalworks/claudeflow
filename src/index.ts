@@ -2,7 +2,6 @@ import { ConfigurationManager } from './config/index.js';
 import { initializeInfrastructure } from './infrastructure/index.js';
 import { createServer, startServer } from './server/index.js';
 import { AuthService } from './cli/services/auth-service.js';
-import { ConfigService } from './cli/services/config-service.js';
 
 async function main() {
   try {
@@ -39,12 +38,12 @@ async function main() {
     // Initialize CLI AuthService for session refresh worker
     let authService: AuthService | undefined;
     try {
-      const configService = new ConfigService();
-      await configService.initialize();
-      
-      authService = new AuthService(configService, infrastructure.redis);
+      const configManager = new ConfigurationManager();
+      const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+
+      authService = new AuthService(configManager, infrastructure.redis, configPath);
       await authService.initialize();
-      
+
       // Start session refresh worker
       await authService.startSessionRefreshWorker();
       console.log('✅ Session refresh worker started');

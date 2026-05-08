@@ -65,11 +65,9 @@ async function setupCommands(program: Command): Promise<void> {
     tokenImportCommand,
     accountRemoveCommand,
     accountListCommand,
-    accountRefreshCommand,
     accountTestCommand,
     accountSetPriorityCommand,
     accountDeleteCommand,
-    anthropicAddCommand,
     proxyAddCommand,
     comboCreateCommand,
     comboListCommand,
@@ -91,42 +89,18 @@ async function setupCommands(program: Command): Promise<void> {
     quotaWatchCommand,
     analyticsShowCommand,
     analyticsExportCommand,
-    configShowCommand,
-    configSetCommand,
-    configResetCommand,
-    profileCreateCommand,
-    profileListCommand,
-    profileSwitchCommand,
-    profileDeleteCommand,
     backupCreateCommand,
     backupListCommand,
     backupRestoreCommand,
     backupExportCommand,
     backupImportCommand,
-    setupCommand,
     sessionStatusCommand,
-    migrateCommand,
     mitmInstallCommand,
     mitmUninstallCommand,
     mitmStartCommand,
     mitmStopCommand,
     mitmStatusCommand,
-    dashboardCommand,
   } = commands;
-
-  // Dashboard command (beautiful TUI)
-  program
-    .command('dashboard')
-    .alias('ui')
-    .description('Launch beautiful TUI dashboard (recommended)')
-    .action(async () => {
-      try {
-        await dashboardCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
 
   // Login command (enhanced with multiple methods)
   program
@@ -198,23 +172,11 @@ async function setupCommands(program: Command): Promise<void> {
     });
 
   accountCmd
-    .command('remove <accountId>')
-    .description('Remove a Kiro account')
-    .action(async (accountId: string) => {
+    .command('remove [accountId]')
+    .description('Remove a Kiro account (interactive if no accountId provided)')
+    .action(async (accountId?: string) => {
       try {
         await accountRemoveCommand(accountId);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  accountCmd
-    .command('refresh <accountId>')
-    .description('Manually refresh account token')
-    .action(async (accountId: string) => {
-      try {
-        await accountRefreshCommand(accountId);
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
@@ -251,21 +213,6 @@ async function setupCommands(program: Command): Promise<void> {
     .action(async () => {
       try {
         await accountDeleteCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  // Add Anthropic account command
-  program
-    .command('add-anthropic')
-    .description('Add direct Anthropic API account (RECOMMENDED)')
-    .option('--api-key <key>', 'Anthropic API key (sk-ant-...)')
-    .option('--skip-validation', 'Skip API key validation')
-    .action(async (options) => {
-      try {
-        await anthropicAddCommand(options);
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);
@@ -614,120 +561,6 @@ async function setupCommands(program: Command): Promise<void> {
     }
   });
 
-  // Config command with subcommands
-  const configCmd = program
-    .command('config')
-    .description('Manage configuration');
-
-  configCmd
-    .command('show')
-    .description('Show current configuration')
-    .action(async () => {
-      try {
-        await configShowCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  configCmd
-    .command('set <key> <value>')
-    .description('Set configuration value')
-    .action(async (key: string, value: string) => {
-      try {
-        await configSetCommand(key, value);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  configCmd
-    .command('reset')
-    .description('Reset configuration to defaults')
-    .action(async () => {
-      try {
-        await configResetCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  // Make 'config' without subcommand default to 'show'
-  configCmd.action(async () => {
-    try {
-      await configShowCommand();
-    } catch (error) {
-      console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-      process.exit(1);
-    }
-  });
-
-  // Profile command with subcommands
-  const profileCmd = program
-    .command('profile')
-    .description('Manage configuration profiles');
-
-  profileCmd
-    .command('create <name>')
-    .description('Create a new profile')
-    .action(async (name: string) => {
-      try {
-        await profileCreateCommand(name);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  profileCmd
-    .command('list')
-    .description('List all profiles')
-    .action(async () => {
-      try {
-        await profileListCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  profileCmd
-    .command('switch <name>')
-    .description('Switch to a different profile')
-    .action(async (name: string) => {
-      try {
-        await profileSwitchCommand(name);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  profileCmd
-    .command('delete <name>')
-    .description('Delete a profile')
-    .action(async (name: string) => {
-      try {
-        await profileDeleteCommand(name);
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  // Make 'profile' without subcommand default to 'list'
-  profileCmd.action(async () => {
-    try {
-      await profileListCommand();
-    } catch (error) {
-      console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-      process.exit(1);
-    }
-  });
-
   // Backup command with subcommands
   const backupCmd = program
     .command('backup')
@@ -812,19 +645,6 @@ async function setupCommands(program: Command): Promise<void> {
       console.log(chalk.gray('Intelligent API router for Anthropic Claude models'));
     });
 
-  // Setup command
-  program
-    .command('setup')
-    .description('Interactive setup wizard for first-time configuration')
-    .action(async () => {
-      try {
-        await setupCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
   // Session command
   program
     .command('session')
@@ -832,23 +652,6 @@ async function setupCommands(program: Command): Promise<void> {
     .action(async () => {
       try {
         await sessionStatusCommand();
-      } catch (error) {
-        console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      }
-    });
-
-  // Migrate command with subcommands
-  const migrateCmd = program
-    .command('migrate')
-    .description('Migrate from old authentication systems');
-
-  migrateCmd
-    .command('from-9router')
-    .description('Migrate from 9router to Kiro OAuth')
-    .action(async () => {
-      try {
-        await migrateCommand();
       } catch (error) {
         console.error(chalk.red('✗ Command failed:'), error instanceof Error ? error.message : String(error));
         process.exit(1);

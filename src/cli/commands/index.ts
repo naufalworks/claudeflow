@@ -10,12 +10,10 @@ export { tokenExportCommand, tokenImportCommand } from './token.js';
 export {
   accountRemoveCommand,
   accountListCommand,
-  accountRefreshCommand,
   accountTestCommand,
   accountSetPriorityCommand,
 } from './account.js';
 export { accountDeleteCommand } from './account-delete.js';
-export { anthropicAddCommand } from './anthropic-add.js';
 export { proxyAddCommand } from './proxy-add.js';
 export {
   comboCreateCommand,
@@ -40,13 +38,6 @@ export { logsCommand } from './logs.js';
 export { healthCheckCommand, healthTestCommand } from './health.js';
 export { quotaShowCommand, quotaWatchCommand } from './quota.js';
 export { analyticsShowCommand, analyticsExportCommand } from './analytics.js';
-export { configShowCommand, configSetCommand, configResetCommand } from './config.js';
-export {
-  profileCreateCommand,
-  profileListCommand,
-  profileSwitchCommand,
-  profileDeleteCommand,
-} from './profile.js';
 export {
   backupCreateCommand,
   backupListCommand,
@@ -54,9 +45,7 @@ export {
   backupExportCommand,
   backupImportCommand,
 } from './backup.js';
-export { setupCommand } from './setup.js';
 export { sessionStatusCommand } from './session.js';
-export { migrateCommand } from './migrate.js';
 export {
   mitmInstallCommand,
   mitmUninstallCommand,
@@ -64,4 +53,3 @@ export {
   mitmStopCommand,
   mitmStatusCommand,
 } from './mitm.js';
-export { dashboardCommand } from './dashboard.js';

@@ -7,7 +7,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import figlet from 'figlet';
-import { dashboardCommand } from '../commands/dashboard.js';
 
 export async function showMainMenu(): Promise<void> {
   // Show banner
@@ -30,10 +29,6 @@ export async function showMainMenu(): Promise<void> {
       message: 'What would you like to do?',
       choices: [
         {
-          name: '📊 Dashboard - View real-time status (Recommended)',
-          value: 'dashboard',
-        },
-        {
           name: '🔐 Login - Add Kiro account',
           value: 'login',
         },
@@ -50,10 +45,6 @@ export async function showMainMenu(): Promise<void> {
           value: 'mitm',
         },
         {
-          name: '⚙️  Settings - Configure ClaudeFlow',
-          value: 'settings',
-        },
-        {
           name: '❓ Help - View documentation',
           value: 'help',
         },
@@ -67,9 +58,6 @@ export async function showMainMenu(): Promise<void> {
 
   // Handle action
   switch (action) {
-    case 'dashboard':
-      await dashboardCommand();
-      break;
     case 'login':
       console.log(chalk.blue('\n🔐 Starting login...\n'));
       console.log(chalk.gray('Run: claudeflow login'));
@@ -85,10 +73,6 @@ export async function showMainMenu(): Promise<void> {
     case 'mitm':
       console.log(chalk.blue('\n🔒 MITM proxy\n'));
       console.log(chalk.gray('Run: claudeflow mitm status'));
-      break;
-    case 'settings':
-      console.log(chalk.blue('\n⚙️  Settings\n'));
-      console.log(chalk.gray('Run: claudeflow config show'));
       break;
     case 'help':
       console.log(chalk.blue('\n❓ Help\n'));

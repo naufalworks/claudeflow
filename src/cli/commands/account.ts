@@ -1,7 +1,7 @@
 /**
  * Account Command
- * 
- * Manage Kiro OAuth accounts (list/remove/refresh/test/set-priority)
+ *
+ * Manage Kiro OAuth accounts (list/remove/test/set-priority)
  * Supports kiro-oauth accounts with secure keychain storage
  */
 
@@ -11,14 +11,11 @@ import ora from 'ora';
 import Table from 'cli-table3';
 import { ConfigurationManager } from '../../config/manager.js';
 import { KeychainStore } from '../../auth/KeychainStore.js';
-import { TokenManager } from '../../auth/TokenManager.js';
-import { DualAuthModeHandler } from '../../auth/DualAuthModeHandler.js';
 import { KiroAPIClient } from '../../clients/KiroAPIClient.js';
 import { logger } from '../utils/logger.js';
 import {
   validateAccountId,
   validatePriority,
-  sanitizeToken,
   logSecurityEvent,
 } from '../utils/security.js';
 import type { KiroOAuthAccount } from '../../config/schema.js';
@@ -163,7 +160,7 @@ export async function accountListCommand(options: { json?: boolean } = {}): Prom
 
     if (expiredAccounts.length > 0) {
       console.log(chalk.red(`\n⚠ ${expiredAccounts.length} account(s) expired`));
-      console.log(chalk.gray('Run: claudeflow account refresh <account-id>'));
+      console.log(chalk.gray('Please login again: claudeflow login'));
     }
 
     if (expiringAccounts.length > 0) {
@@ -181,15 +178,13 @@ export async function accountListCommand(options: { json?: boolean } = {}): Prom
 
 /**
  * Account remove command
- * 
+ *
  * Removes account from config AND deletes credentials from keychain
+ * Interactive mode: shows account list and prompts for selection
  */
-export async function accountRemoveCommand(accountId: string): Promise<void> {
+export async function accountRemoveCommand(accountId?: string): Promise<void> {
   try {
-    logger.info('Starting account remove command', { accountId });
-
-    // Validate account ID format
-    validateAccountId(accountId);
+    logger.info('Starting account remove command');
 
     // Initialize services
     const configManager = new ConfigurationManager();
@@ -197,26 +192,54 @@ export async function accountRemoveCommand(accountId: string): Promise<void> {
 
     const config = configManager.getConfig();
 
+    // Filter for kiro-oauth accounts only
+    const kiroAccounts = config.accounts.filter(
+      (a) => a.provider === 'kiro-oauth'
+    ) as KiroOAuthAccount[];
+
+    if (kiroAccounts.length === 0) {
+      console.log(chalk.yellow('\nNo Kiro OAuth accounts configured'));
+      console.log(chalk.gray('Add an account with: claudeflow login'));
+      return;
+    }
+
+    // If accountId not provided, show interactive list
+    if (!accountId) {
+      const { selectedAccountId } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedAccountId',
+          message: 'Select an account to remove',
+          choices: kiroAccounts.map((account) => ({
+            name: `${account.id} (${account.region}) - ${account.profileArn}`,
+            value: account.id,
+          })),
+        },
+      ]);
+      accountId = selectedAccountId;
+    }
+
     // Check if account exists
-    const account = config.accounts.find(a => a.id === accountId);
+    const account = kiroAccounts.find((a) => a.id === accountId);
     if (!account) {
       console.error(chalk.red(`✗ Account '${accountId}' not found`));
       process.exit(1);
     }
 
-    // Check if it's a kiro-oauth account
-    if (account.provider !== 'kiro-oauth') {
-      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
-      console.log(chalk.gray(`This account has provider: ${account.provider}`));
-      process.exit(1);
-    }
+    // Show account details and confirm removal
+    console.log(chalk.blue('\nAccount Details:'));
+    console.log(chalk.gray('─'.repeat(60)));
+    console.log(`${chalk.bold('Account ID:')} ${account.id}`);
+    console.log(`${chalk.bold('Region:')} ${account.region}`);
+    console.log(`${chalk.bold('Profile ARN:')} ${account.profileArn}`);
+    console.log(`${chalk.bold('Expiry:')} ${new Date(account.expiresAt).toLocaleString()}`);
+    console.log(chalk.gray('─'.repeat(60)));
 
-    // Confirm removal
     const { confirm } = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'confirm',
-        message: `Are you sure you want to remove account '${accountId}'?`,
+        message: `Are you sure you want to remove this account?`,
         default: false,
       },
     ]);
@@ -230,10 +253,10 @@ export async function accountRemoveCommand(accountId: string): Promise<void> {
 
     try {
       // Delete credentials from keychain
-      await keychainStore.delete(accountId);
+      await keychainStore.delete(accountId!);
 
       // Remove from config
-      config.accounts = config.accounts.filter(a => a.id !== accountId);
+      config.accounts = config.accounts.filter((a) => a.id !== accountId);
       configManager.saveConfig(config);
 
       spinner.succeed('Account removed successfully');
@@ -243,7 +266,7 @@ export async function accountRemoveCommand(accountId: string): Promise<void> {
       console.log(chalk.gray('  • Account removed from config'));
 
       // Log security event
-      logSecurityEvent('account-remove', accountId, 'success');
+      logSecurityEvent('account-remove', accountId!, 'success');
 
       logger.info('Account remove command completed successfully', { accountId });
     } catch (error) {
@@ -255,7 +278,7 @@ export async function accountRemoveCommand(accountId: string): Promise<void> {
     console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
 
     // Log security event
-    logSecurityEvent('account-remove', accountId, 'failure', {
+    logSecurityEvent('account-remove', (accountId as string) || 'unknown', 'failure', {
       error: error instanceof Error ? error.message : String(error),
     });
 
@@ -263,88 +286,6 @@ export async function accountRemoveCommand(accountId: string): Promise<void> {
   }
 }
 
-/**
- * Account refresh command
- * 
- * Manually refresh token for a Kiro OAuth account
- */
-export async function accountRefreshCommand(accountId: string): Promise<void> {
-  try {
-    logger.info('Starting account refresh command', { accountId });
-
-    // Validate account ID format
-    validateAccountId(accountId);
-
-    // Initialize services
-    const configManager = new ConfigurationManager();
-    const keychainStore = new KeychainStore();
-    const dualAuthModeHandler = new DualAuthModeHandler();
-    const tokenManager = new TokenManager(keychainStore, dualAuthModeHandler, configManager);
-
-    const config = configManager.getConfig();
-
-    // Check if account exists
-    const account = config.accounts.find(a => a.id === accountId) as KiroOAuthAccount | undefined;
-    if (!account) {
-      console.error(chalk.red(`✗ Account '${accountId}' not found`));
-      process.exit(1);
-    }
-
-    // Check if it's a kiro-oauth account
-    if (account.provider !== 'kiro-oauth') {
-      console.error(chalk.red(`✗ Account '${accountId}' is not a Kiro OAuth account`));
-      console.log(chalk.gray(`This account has provider: ${account.provider}`));
-      console.log(chalk.gray('Token refresh is only available for Kiro OAuth accounts.'));
-      process.exit(1);
-    }
-
-    // Refresh token
-    const spinner = ora('Refreshing token...').start();
-
-    try {
-      const result = await tokenManager.refresh(accountId);
-
-      spinner.succeed('Token refreshed successfully!');
-
-      // Update config with new expiry time
-      account.expiresAt = result.expiresAt.toISOString();
-      account.lastUsed = Date.now();
-      configManager.saveConfig(config);
-
-      console.log(chalk.green('\n✓ Token refreshed successfully!'));
-      console.log(chalk.blue('\nToken Details:'));
-      console.log(chalk.gray('─'.repeat(60)));
-      console.log(`${chalk.bold('Account ID:')} ${accountId}`);
-      console.log(`${chalk.bold('New Expiry:')} ${result.expiresAt.toLocaleString()}`);
-      console.log(`${chalk.bold('Access Token:')} ${sanitizeToken(result.accessToken)}`);
-      console.log(chalk.gray('─'.repeat(60)));
-
-      // Log security event
-      logSecurityEvent('token-refresh', accountId, 'success');
-
-      logger.info('Account refresh command completed successfully', { accountId });
-    } catch (error) {
-      spinner.fail('Token refresh failed');
-
-      if (error instanceof Error && error.message.includes('401')) {
-        console.error(chalk.red('\n✗ Authentication failed'));
-        console.log(chalk.yellow('\nYour refresh token has expired or is invalid.'));
-        console.log(chalk.gray('Please login again: claudeflow login'));
-      }
-
-      // Log security event
-      logSecurityEvent('token-refresh', accountId, 'failure', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      throw error;
-    }
-  } catch (error) {
-    logger.error('Account refresh command failed', error);
-    console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
 
 /**
  * Account test command

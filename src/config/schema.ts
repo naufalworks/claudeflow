@@ -89,11 +89,14 @@ export type OAuthAccount = z.infer<typeof OAuthAccountSchema>;
 export type KiroOAuthAccount = z.infer<typeof KiroOAuthAccountSchema>;
 export type Account = z.infer<typeof AccountSchema>;
 
+// Case-insensitive log level enum
+const LogLevelSchema = z.enum(['debug', 'info', 'warn', 'error']).transform((val) => val.toLowerCase());
+
 export const ConfigSchema = z.object({
   server: z.object({
     port: z.number().int().positive().default(20129),
     host: z.string().default('0.0.0.0'),
-    logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+    logLevel: LogLevelSchema.default('info'),
   }),
   infrastructure: z.object({
     qdrant: z.object({

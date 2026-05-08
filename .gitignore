@@ -45,3 +45,21 @@ config.json
 SESSION_*.md
 .audit/
 *.IMPLEMENTATION.md
+
+# Dev/scratch notes
+AUTO_USAGE_TRACKING.md
+DAEMON_FIX.md
+DASHBOARD_FIXES.md
+DASHBOARD_ISSUES_EXPLAINED.md
+TRACKING_SYSTEM.md
+QUICK_START_MITM.md
+add-test-usage.js
+
+# External dependencies (have their own repos)
+9router/
+
+# Test data
+test-data/
+
+# Kiro spec artifacts (development-only)
+.kiro/specs/

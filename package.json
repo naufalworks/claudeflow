@@ -49,10 +49,12 @@
     "jose": "^6.2.3",
     "keytar": "^7.9.0",
     "lowdb": "^7.0.1",
+    "node-cron": "^4.2.1",
     "ora": "^9.4.0",
     "pino": "^8.19.0",
     "pino-pretty": "^11.0.0",
     "pm2": "^7.0.0",
+    "ws": "^8.20.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -61,6 +63,8 @@
     "@types/inquirer": "^9.0.9",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.12.7",
+    "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^7.6.0",
     "@typescript-eslint/parser": "^7.6.0",
     "depcheck": "^1.4.7",

@@ -16,6 +16,7 @@ import { ConfigurationManager } from '../../config/manager.js';
 import type { KiroOAuthAccount } from '../../config/schema.js';
 import { KeychainStore } from '../../auth/KeychainStore.js';
 import { getAccountUsage, getTotalUsage } from '../../lib/usageDb.js';
+import { DashboardWebSocketClient } from '../../tracking/DashboardWebSocketClient.js';
 
 export interface DashboardStats {
   totalAccounts: number;
@@ -36,6 +37,9 @@ export class TUIDashboard {
   private configManager: ConfigurationManager;
   private keychainStore: KeychainStore;
   private refreshInterval?: NodeJS.Timeout;
+  private wsClient: DashboardWebSocketClient | null = null;
+  private wsConnected = false;
+  private renderDebounceTimer: NodeJS.Timeout | null = null;
 
   // Widgets
   private headerBox: blessed.Widgets.BoxElement;
@@ -257,7 +261,7 @@ export class TUIDashboard {
       this.stop();
 
       // Give time for screen to fully destroy
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       await this.deleteAccountInteractive();
     });
@@ -344,9 +348,13 @@ export class TUIDashboard {
     const secondsSinceRefresh = Math.floor((Date.now() - stats.lastRefresh.getTime()) / 1000);
     const nextCheck = 60 - secondsSinceRefresh;
 
+    const connectionStatus = this.wsConnected
+      ? '{bold}{green-fg}● WebSocket Connected{/green-fg}{/bold}'
+      : '{bold}{yellow-fg}○ Polling (5s interval){/yellow-fg}{/bold}';
+
     const content = [
       '',
-      `  Background Worker:  {bold}{green-fg}● Running{/green-fg}{/bold}`,
+      `  Connection:         ${connectionStatus}`,
       `  Check Interval:     {bold}Every 60 seconds{/bold}`,
       `  Last Check:         {bold}${secondsSinceRefresh}s ago{/bold}`,
       `  Next Check:         {bold}{yellow-fg}${nextCheck}s{/yellow-fg}{/bold}`,
@@ -364,13 +372,14 @@ export class TUIDashboard {
   private async updateAccountsTable(): Promise<void> {
     const config = this.configManager.getConfig();
     const kiroAccounts = config.accounts.filter(
-      a => a.provider === 'kiro-oauth'
+      (a) => a.provider === 'kiro-oauth'
     ) as KiroOAuthAccount[];
 
     const headers = ['Account ID', 'Region', 'Status', 'Expires', 'Requests', 'Tokens', 'Credits'];
     const data: string[][] = [];
 
-    for (const account of kiroAccounts.slice(0, 20)) { // Show first 20
+    for (const account of kiroAccounts.slice(0, 20)) {
+      // Show first 20
       const expiresAt = new Date(account.expiresAt);
       const now = new Date();
       const timeUntilExpiry = expiresAt.getTime() - now.getTime();
@@ -442,7 +451,7 @@ export class TUIDashboard {
   private async getStats(): Promise<DashboardStats> {
     const config = this.configManager.getConfig();
     const kiroAccounts = config.accounts.filter(
-      a => a.provider === 'kiro-oauth'
+      (a) => a.provider === 'kiro-oauth'
     ) as KiroOAuthAccount[];
 
     let activeAccounts = 0;
@@ -493,6 +502,53 @@ export class TUIDashboard {
   }
 
   /**
+   * Handle usage event from WebSocket
+   * Updates stats and activity log
+   */
+  private handleUsageEvent(_msg: unknown): void {
+    // Update stats display (Req 13.2)
+    this.updateStats().catch(() => {});
+    this.updateActivityLog();
+    this.debouncedRender();
+  }
+
+  /**
+   * Handle quota update from WebSocket
+   * Updates quota gauge
+   */
+  private handleQuotaUpdate(_msg: unknown): void {
+    // Update quota gauge (Req 13.3)
+    this.updateQuotaGauge().catch(() => {});
+    this.debouncedRender();
+  }
+
+  /**
+   * Handle account status change from WebSocket
+   * Updates accounts table
+   */
+  private handleAccountStatusChange(_msg: unknown): void {
+    // Update accounts table (Req 13.4)
+    this.updateAccountsTable().catch(() => {});
+    this.debouncedRender();
+  }
+
+  /**
+   * Debounced screen render to prevent UI flooding from rapid events
+   */
+  private debouncedRender(): void {
+    if (this.renderDebounceTimer) {
+      clearTimeout(this.renderDebounceTimer);
+    }
+    this.renderDebounceTimer = setTimeout(() => {
+      try {
+        this.screen.render();
+      } catch {
+        // Screen may be destroyed during shutdown
+      }
+    }, 100);
+  }
+
+  /**
    * Refresh dashboard
    */
   public async refresh(): Promise<void> {
@@ -510,7 +566,8 @@ export class TUIDashboard {
    */
   public async start(): Promise<void> {
     // Load config
-    const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+    const configPath =
+      process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
     await this.configManager.loadConfig(configPath);
 
     // Check if MITM is running, if not, offer to start it
@@ -520,7 +577,9 @@ export class TUIDashboard {
       const execAsync = promisify(exec);
 
       // Check if MITM proxy is running
-      const { stdout } = await execAsync('lsof -i :443 -sTCP:LISTEN 2>/dev/null || echo "not running"');
+      const { stdout } = await execAsync(
+        'lsof -i :443 -sTCP:LISTEN 2>/dev/null || echo "not running"'
+      );
 
       if (stdout.includes('not running')) {
         console.log('\n⚠️  MITM proxy is not running');
@@ -528,7 +587,7 @@ export class TUIDashboard {
         console.log('\nRun: sudo claudeflow daemon start --mitm\n');
 
         // Wait 3 seconds before showing dashboard
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     } catch (error) {
       // Ignore errors, just show dashboard
@@ -537,7 +596,69 @@ export class TUIDashboard {
     // Initial render
     await this.refresh();
 
-    // Auto-refresh every 5 seconds
+    // Try WebSocket for real-time updates (Req 13.1)
+    try {
+      const wsUrl = process.env.CLAUDEFLOW_WS_URL || 'ws://localhost:8080';
+      this.wsClient = new DashboardWebSocketClient({ url: wsUrl });
+
+      this.wsClient.on('connected', () => {
+        this.wsConnected = true;
+        this.wsClient!.subscribe(['usage', 'quota', 'accounts']);
+        this.updateAutoRefreshBox().catch(() => {});
+        this.debouncedRender();
+      });
+
+      this.wsClient.on('disconnected', () => {
+        this.wsConnected = false;
+        this.updateAutoRefreshBox().catch(() => {});
+        this.debouncedRender();
+      });
+
+      this.wsClient.on('usage_event', (msg: unknown) => {
+        try {
+          this.handleUsageEvent(msg);
+        } catch {
+          // Prevent TUI crash from WebSocket errors
+        }
+      });
+
+      this.wsClient.on('quota_update', (msg: unknown) => {
+        try {
+          this.handleQuotaUpdate(msg);
+        } catch {
+          // Prevent TUI crash from WebSocket errors
+        }
+      });
+
+      this.wsClient.on('account_status', (msg: unknown) => {
+        try {
+          this.handleAccountStatusChange(msg);
+        } catch {
+          // Prevent TUI crash from WebSocket errors
+        }
+      });
+
+      this.wsClient.on('poll', () => {
+        // Polling fallback: trigger manual refresh
+        this.refresh().catch(() => {});
+      });
+
+      this.wsClient.on('error', () => {
+        // Silently handle — reconnection is automatic in DashboardWebSocketClient
+      });
+
+      this.wsClient.on('status_change', () => {
+        this.updateAutoRefreshBox().catch(() => {});
+        this.debouncedRender();
+      });
+
+      // Connect without blocking dashboard startup
+      this.wsClient.connect().catch(() => {});
+    } catch {
+      // WebSocket not available — dashboard works fine with polling
+    }
+
+    // Auto-refresh every 5 seconds (fallback)
     this.refreshInterval = setInterval(async () => {
       await this.refresh();
     }, 5000);
@@ -553,6 +674,19 @@ export class TUIDashboard {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
+
+    // Disconnect WebSocket client
+    if (this.wsClient) {
+      this.wsClient.disconnect();
+      this.wsClient = null;
+    }
+
+    // Clear debounce timer
+    if (this.renderDebounceTimer) {
+      clearTimeout(this.renderDebounceTimer);
+      this.renderDebounceTimer = null;
+    }
+
     this.screen.destroy();
   }
 
@@ -570,12 +704,13 @@ export class TUIDashboard {
     console.log('\n🗑️  Delete Kiro Account\n');
 
     // Reload config to ensure we have latest data
-    const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+    const configPath =
+      process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
     await this.configManager.loadConfig(configPath);
 
     const config = this.configManager.getConfig();
     const kiroAccounts = config.accounts.filter(
-      a => a.provider === 'kiro-oauth'
+      (a) => a.provider === 'kiro-oauth'
     ) as KiroOAuthAccount[];
 
     if (kiroAccounts.length === 0) {
@@ -593,7 +728,7 @@ export class TUIDashboard {
     }
 
     // Create choices for inquirer
-    const choices = kiroAccounts.map(account => ({
+    const choices = kiroAccounts.map((account) => ({
       name: `${account.id} (${account.region})`,
       value: account.id,
     }));
@@ -650,7 +785,7 @@ export class TUIDashboard {
     }
 
     // Delete from config
-    const updatedAccounts = config.accounts.filter(a => a.id !== accountId);
+    const updatedAccounts = config.accounts.filter((a) => a.id !== accountId);
     config.accounts = updatedAccounts;
 
     await this.configManager.saveConfig(config);

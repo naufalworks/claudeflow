@@ -10,6 +10,7 @@
  */
 
 import https from 'https';
+import path from 'path';
 import { promises as fs } from 'fs';
 import { IncomingMessage, ServerResponse } from 'http';
 import { CertificateManager } from './certificate-manager.js';
@@ -19,7 +20,8 @@ import { KeychainStore } from '../auth/KeychainStore.js';
 import { ConfigurationManager } from '../config/manager.js';
 import type { KiroOAuthAccount } from '../config/schema.js';
 import type { KiroAPIConfig } from '../types/kiro-oauth.types.js';
-import { saveRequestUsage } from '../lib/usageDb.js';
+import { UsageTrackingManager } from '../tracking/UsageTrackingManager.js';
+import { QuotaManagementManager } from '../tracking/QuotaManagementManager.js';
 
 export interface ProxyServerConfig {
   port: number;
@@ -43,6 +45,8 @@ export class ProxyServer {
   private accountPoolManager?: AccountPoolManager;
   private kiroAPIClient: KiroAPIClient;
   private stats: ProxyStats;
+  private usageTrackingManager: UsageTrackingManager | null = null;
+  private quotaManagementManager: QuotaManagementManager | null = null;
   private config: ProxyServerConfig;
 
   constructor(config: ProxyServerConfig) {
@@ -85,6 +89,17 @@ export class ProxyServer {
       config,
       this.config.keychainStore
     );
+
+    // Initialize usage tracking manager with SQLite storage
+    const dataDir =
+      process.env.CLAUDEFLOW_DATA_DIR || path.join(process.env.HOME || '', '.claudeflow');
+    const dbPath = path.join(dataDir, 'usage-tracking.db');
+    this.usageTrackingManager = new UsageTrackingManager({ databasePath: dbPath });
+
+    // Initialize quota management manager for quota-aware account selection
+    const quotaDbPath = path.join(dataDir, 'quota-tracking.db');
+    this.quotaManagementManager = new QuotaManagementManager(quotaDbPath);
+    this.accountPoolManager.setQuotaManagementManager(this.quotaManagementManager);
 
     // Create HTTPS server
     this.server = https.createServer(
@@ -140,11 +155,9 @@ export class ProxyServer {
   /**
    * Handle incoming HTTPS request
    */
-  private async handleRequest(
-    req: IncomingMessage,
-    res: ServerResponse
-  ): Promise<void> {
+  private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     this.stats.totalRequests++;
+    const requestStartTime = Date.now();
 
     try {
       // Log request
@@ -213,22 +226,27 @@ export class ProxyServer {
         apiConfig
       );
 
-      // Track usage in database
+      // Track usage with UsageTrackingManager (Req 11.1, 11.2)
+      const latency = Date.now() - requestStartTime;
       try {
-        await saveRequestUsage({
+        await this.usageTrackingManager?.trackRequest({
           accountId: account.id,
           model: requestData.model || 'claude-sonnet-4',
           region: apiConfig.region,
           tokens: {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
-            cache_creation_input_tokens: response.usage.cache_creation_input_tokens,
-            cache_read_input_tokens: response.usage.cache_read_input_tokens,
+            inputTokens: response.usage.input_tokens,
+            outputTokens: response.usage.output_tokens,
+            cacheCreationTokens: response.usage.cache_creation_input_tokens,
+            cacheReadTokens: response.usage.cache_read_input_tokens,
           },
+          latency,
           status: 'success',
         });
-        console.log(`[MITM] ✓ Usage tracked: ${response.usage.input_tokens + response.usage.output_tokens} tokens`);
+        console.log(
+          `[MITM] ✓ Usage tracked: ${response.usage.input_tokens + response.usage.output_tokens} tokens (${latency}ms)`
+        );
       } catch (error) {
+        // Req 11.4: Log error but never fail the API request
         console.error('[MITM] ⚠ Failed to track usage:', error);
       }
 
@@ -291,7 +309,7 @@ export class ProxyServer {
       'q.ap-southeast-1.amazonaws.com',
     ];
 
-    return kiroDomains.some(domain => hostname.includes(domain));
+    return kiroDomains.some((domain) => hostname.includes(domain));
   }
 
   /**

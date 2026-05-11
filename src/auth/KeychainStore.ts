@@ -13,13 +13,24 @@
  * - Zod schema validation on retrieval
  */
 
-import * as keytar from 'keytar';
 import * as crypto from 'crypto';
 import * as os from 'os';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
 import type { KeychainCredentials } from '../types/kiro-oauth.types.js';
+
+/**
+ * Optional keytar import — gracefully handles missing native module.
+ * Keytar requires native compilation (node-gyp) and may not be available
+ * on all systems. The encrypted file fallback is always available.
+ */
+let keytar: typeof import('keytar') | null = null;
+try {
+  keytar = await import('keytar');
+} catch {
+  // keytar not available — encrypted file fallback will be used
+}
 
 /**
  * Supported keychain backends
@@ -73,19 +84,21 @@ export class KeychainStore {
     // Validate credentials before storing
     KeychainCredentialsSchema.parse(credentials);
 
-    try {
-      // Try keychain first
-      await this.storeInKeychain(accountId, credentials);
-    } catch (error: any) {
-      // Log keychain failure, fall back to file
-      console.warn(
-        `Keychain storage failed for account ${accountId}, falling back to encrypted file:`,
-        error.message
-      );
-      
-      // Fall back to encrypted file
-      await this.storeInFile(accountId, credentials);
+    // Try keychain first (if available)
+    if (keytar) {
+      try {
+        await this.storeInKeychain(accountId, credentials);
+        return;
+      } catch (error: any) {
+        console.warn(
+          `Keychain storage failed for account ${accountId}, falling back to encrypted file:`,
+          error.message
+        );
+      }
     }
+
+    // Fall back to encrypted file
+    await this.storeInFile(accountId, credentials);
   }
 
   /**
@@ -93,17 +106,19 @@ export class KeychainStore {
    * Tries OS keychain first, falls back to encrypted file
    */
   async retrieve(accountId: string): Promise<KeychainCredentials | null> {
-    try {
-      // Try keychain first
-      const credentials = await this.retrieveFromKeychain(accountId);
-      if (credentials) {
-        return credentials;
+    // Try keychain first (if available)
+    if (keytar) {
+      try {
+        const credentials = await this.retrieveFromKeychain(accountId);
+        if (credentials) {
+          return credentials;
+        }
+      } catch (error: any) {
+        console.warn(
+          `Keychain retrieval failed for account ${accountId}, trying encrypted file:`,
+          error.message
+        );
       }
-    } catch (error: any) {
-      console.warn(
-        `Keychain retrieval failed for account ${accountId}, trying encrypted file:`,
-        error.message
-      );
     }
 
     // Fall back to encrypted file
@@ -119,7 +134,9 @@ export class KeychainStore {
 
     // Try to delete from keychain
     try {
-      await keytar.deletePassword(this.SERVICE_NAME, accountId);
+      if (keytar) {
+        await keytar.deletePassword(this.SERVICE_NAME, accountId);
+      }
     } catch (error: any) {
       errors.push(error);
     }
@@ -148,9 +165,11 @@ export class KeychainStore {
   async exists(accountId: string): Promise<boolean> {
     try {
       // Check keychain
-      const password = await keytar.getPassword(this.SERVICE_NAME, accountId);
-      if (password) {
-        return true;
+      if (keytar) {
+        const password = await keytar.getPassword(this.SERVICE_NAME, accountId);
+        if (password) {
+          return true;
+        }
       }
     } catch (error) {
       // Keychain check failed, continue to file check
@@ -191,6 +210,9 @@ export class KeychainStore {
     accountId: string,
     credentials: KeychainCredentials
   ): Promise<void> {
+    if (!keytar) {
+      throw new Error('Keytar module not available');
+    }
     const password = JSON.stringify(credentials);
     await keytar.setPassword(this.SERVICE_NAME, accountId, password);
   }
@@ -201,8 +223,11 @@ export class KeychainStore {
   private async retrieveFromKeychain(
     accountId: string
   ): Promise<KeychainCredentials | null> {
+    if (!keytar) {
+      return null;
+    }
     const password = await keytar.getPassword(this.SERVICE_NAME, accountId);
-    
+
     if (!password) {
       return null;
     }
@@ -210,7 +235,7 @@ export class KeychainStore {
     // Parse and validate
     const parsed = JSON.parse(password);
     const validated = KeychainCredentialsSchema.parse(parsed) as KeychainCredentials;
-    
+
     return validated;
   }
 

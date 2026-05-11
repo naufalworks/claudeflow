@@ -59,7 +59,7 @@ export async function createServer(context: ServerContext): Promise<FastifyInsta
         method: request.method,
         url: request.url,
         statusCode: reply.statusCode,
-        responseTime: reply.getResponseTime(),
+        responseTime: reply.elapsedTime,
       },
       'Request completed'
     );

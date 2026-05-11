@@ -110,6 +110,13 @@ export const ConfigSchema = z.object({
     }),
   }),
   accounts: z.array(AccountSchema).min(1),
+  routing: z.object({
+    strategy: z.enum(['weighted-score', 'round-robin', 'sticky-round-robin']).default('weighted-score'),
+    stickyLimit: z.number().int().positive().default(3), // requests per account before switching
+  }).default({
+    strategy: 'weighted-score',
+    stickyLimit: 3,
+  }),
   optimization: z.object({
     semanticDeduplication: z.object({
       enabled: z.boolean().default(true),
@@ -162,6 +169,10 @@ export const defaultConfig: Config = {
     },
   },
   accounts: [],
+  routing: {
+    strategy: 'weighted-score',
+    stickyLimit: 3,
+  },
   optimization: {
     semanticDeduplication: {
       enabled: true,

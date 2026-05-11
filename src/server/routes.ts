@@ -216,7 +216,7 @@ export async function handleMessagesRequest(
     
     // 7. Select account
     const accountPoolManager = new AccountPoolManager(infrastructure.redis, config, infrastructure.keychain);
-    const accountSelection = await accountPoolManager.selectAccount();
+    const accountSelection = await accountPoolManager.selectAccount(optimizedRequest.model);
     
     request.log.info(
       {
@@ -579,7 +579,7 @@ async function handleStreamingRequest(
     
     // 5. Select account
     const accountPoolManager = new AccountPoolManager(infrastructure.redis, config, infrastructure.keychain);
-    const accountSelection = await accountPoolManager.selectAccount();
+    const accountSelection = await accountPoolManager.selectAccount(optimizedRequest.model);
     
     request.log.info(
       {

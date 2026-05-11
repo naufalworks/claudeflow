@@ -36,6 +36,8 @@ import {
   QuotaExhaustedError,
 } from '../errors/kiro-errors.js';
 import { needsTokenRefresh, TokenRefreshDeduplicator } from './tokenRefresh.js';
+import { isUnrecoverableError, getUnrecoverableErrorMessage } from './unrecoverable-errors.js';
+import { getCachedToken, cacheToken, invalidateCache } from './provider-optimizations.js';
 
 /**
  * Pool account - wraps config Account with runtime fields
@@ -102,6 +104,11 @@ export class AccountPoolManager {
   // Token refresh mutex to prevent concurrent refresh race conditions
   private tokenRefreshLocks: Map<string, Promise<void>> = new Map();
   private tokenRefreshDeduplicator = new TokenRefreshDeduplicator();
+
+  // Round-robin state tracking
+  private roundRobinIndex: number = 0;
+  private stickyAccountId: string | null = null;
+  private stickyRequestCount: number = 0;
 
   // Error recovery constants
   private static readonly MAX_AUTH_RETRIES = 1; // Max refresh+retry for 401 errors
@@ -278,13 +285,33 @@ export class AccountPoolManager {
    *
    * @returns Account selection result
    */
-  async selectAccount(): Promise<AccountSelectionResult> {
+  async selectAccount(model?: string): Promise<AccountSelectionResult> {
     if (this.accounts.size === 0) {
       throw new Error('No accounts available in pool');
     }
 
     // Load quota information from Redis for all accounts
     await this.loadQuotaFromRedis();
+
+    // Get routing strategy from config
+    const strategy = this.config.routing?.strategy || 'weighted-score';
+
+    // Route to appropriate selection strategy
+    switch (strategy) {
+      case 'round-robin':
+        return this.selectAccountRoundRobin(model);
+      case 'sticky-round-robin':
+        return this.selectAccountStickyRoundRobin(model);
+      case 'weighted-score':
+      default:
+        return this.selectAccountWeightedScore(model);
+    }
+  }
+
+  /**
+   * Select account using weighted score strategy (original logic)
+   */
+  private async selectAccountWeightedScore(model?: string): Promise<AccountSelectionResult> {
 
     // Stage 1: Filter by circuit breaker state
     let availableAccounts = Array.from(this.accounts.values()).filter((account) => {
@@ -315,7 +342,7 @@ export class AccountPoolManager {
       // For kiro-oauth accounts, check rate limiter
       if (account.provider === 'kiro-oauth') {
         const rateLimiter = this.rateLimiters.get(account.id);
-        if (rateLimiter && rateLimiter.isNearLimit()) {
+        if (rateLimiter && rateLimiter.isNearLimit(model)) {
           return false; // Near rate limit, skip for preemptive switching
         }
       }
@@ -431,6 +458,155 @@ export class AccountPoolManager {
     }
 
     return selectedResult;
+  }
+
+  /**
+   * Select account using round-robin strategy
+   */
+  private async selectAccountRoundRobin(model?: string): Promise<AccountSelectionResult> {
+    const availableAccounts = await this.getHealthyAccounts(model);
+
+    if (availableAccounts.length === 0) {
+      throw new NoHealthyAccountsError();
+    }
+
+    // Round-robin selection
+    this.roundRobinIndex = this.roundRobinIndex % availableAccounts.length;
+    const selectedAccount = availableAccounts[this.roundRobinIndex];
+    this.roundRobinIndex++;
+
+    // Check token refresh for kiro-oauth accounts
+    await this.checkAndRefreshToken(selectedAccount);
+
+    return {
+      account: selectedAccount,
+      score: 1.0,
+      reason: `round-robin (index: ${this.roundRobinIndex - 1})`,
+    };
+  }
+
+  /**
+   * Select account using sticky round-robin strategy
+   */
+  private async selectAccountStickyRoundRobin(model?: string): Promise<AccountSelectionResult> {
+    const availableAccounts = await this.getHealthyAccounts(model);
+
+    if (availableAccounts.length === 0) {
+      throw new NoHealthyAccountsError();
+    }
+
+    const stickyLimit = this.config.routing?.stickyLimit || 3;
+
+    // Check if we should stick with current account
+    if (this.stickyAccountId && this.stickyRequestCount < stickyLimit) {
+      const stickyAccount = availableAccounts.find(a => a.id === this.stickyAccountId);
+      if (stickyAccount) {
+        this.stickyRequestCount++;
+        await this.checkAndRefreshToken(stickyAccount);
+        return {
+          account: stickyAccount,
+          score: 1.0,
+          reason: `sticky-round-robin (count: ${this.stickyRequestCount}/${stickyLimit})`,
+        };
+      }
+    }
+
+    // Switch to next account
+    this.roundRobinIndex = this.roundRobinIndex % availableAccounts.length;
+    const selectedAccount = availableAccounts[this.roundRobinIndex];
+    this.roundRobinIndex++;
+    this.stickyAccountId = selectedAccount.id;
+    this.stickyRequestCount = 1;
+
+    await this.checkAndRefreshToken(selectedAccount);
+
+    return {
+      account: selectedAccount,
+      score: 1.0,
+      reason: `sticky-round-robin (switched, count: 1/${stickyLimit})`,
+    };
+  }
+
+  /**
+   * Get healthy accounts after filtering
+   */
+  private async getHealthyAccounts(model?: string): Promise<PoolAccount[]> {
+    // Stage 1: Filter by circuit breaker state
+    let availableAccounts = Array.from(this.accounts.values()).filter((account) => {
+      if (account.provider === 'kiro-oauth') {
+        const circuitBreaker = this.circuitBreakers.get(account.id);
+        if (circuitBreaker && !circuitBreaker.canExecute()) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Stage 2: Filter by health status
+    availableAccounts = availableAccounts.filter((account) => {
+      if (account.provider === 'kiro-oauth') {
+        const healthMonitor = this.healthMonitors.get(account.id);
+        if (healthMonitor && !healthMonitor.isHealthy()) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Stage 3: Filter by rate limit status
+    availableAccounts = availableAccounts.filter((account) => {
+      if (account.provider === 'kiro-oauth') {
+        const rateLimiter = this.rateLimiters.get(account.id);
+        if (rateLimiter && rateLimiter.isNearLimit(model)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Stage 4: Filter by quota status
+    availableAccounts = availableAccounts.filter((account) => {
+      if (account.provider === 'kiro-oauth') {
+        const quotaTracker = this.quotaTrackers.get(account.id);
+        if (quotaTracker && quotaTracker.isNearLimit()) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    return availableAccounts;
+  }
+
+  /**
+   * Check and refresh token if needed for kiro-oauth accounts
+   */
+  private async checkAndRefreshToken(account: PoolAccount): Promise<void> {
+    if (account.provider === 'kiro-oauth') {
+      const credentials = await this.keychainStore.retrieve(account.id);
+      if (credentials?.expiresAt) {
+        if (needsTokenRefresh(credentials.expiresAt, 'kiro-oauth')) {
+          console.log(`[AccountPool] Token expiring soon, refreshing ${account.id}`);
+          try {
+            await this.refreshTokenWithLock(account.id, account);
+          } catch (error) {
+            throw new Error(`Failed to refresh token for ${account.id}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+    }
+
+    // For legacy OAuth accounts
+    if (account.provider === 'kiro') {
+      const needsRefresh = await this.authManager.needsRefresh(account);
+      if (needsRefresh) {
+        try {
+          await this.authManager.refreshSession(account);
+        } catch (error) {
+          throw new Error('Failed to refresh OAuth session');
+        }
+      }
+    }
   }
 
   /**
@@ -710,6 +886,29 @@ export class AccountPoolManager {
     const refreshPromise = (async () => {
       try {
         await this.authManager.refreshSession(account);
+      } catch (error) {
+        // Check if error is unrecoverable
+        const unrecoverableResult = isUnrecoverableError(error);
+        if (unrecoverableResult.isUnrecoverable) {
+          console.error(
+            `[AccountPool] Unrecoverable error for account ${accountId}: ${unrecoverableResult.errorCode}`,
+            unrecoverableResult.message
+          );
+
+          // Mark account as permanently failed
+          this.markUnhealthy(accountId, `Unrecoverable error: ${unrecoverableResult.errorCode}`);
+
+          // Increment error count
+          if (account.provider === 'kiro-oauth') {
+            const kiroAccount = account as any;
+            kiroAccount.errorCount = (kiroAccount.errorCount || 0) + 1;
+          }
+
+          throw new Error(
+            getUnrecoverableErrorMessage(unrecoverableResult.errorCode!)
+          );
+        }
+        throw error;
       } finally {
         // Always clean up the lock, even on failure
         this.tokenRefreshLocks.delete(accountId);
@@ -726,18 +925,33 @@ export class AccountPoolManager {
    *
    * Refreshes the token if needed and returns updated credentials.
    * Uses in-flight deduplication to prevent concurrent refreshes.
+   * Uses token cache for kiro-oauth accounts to reduce refresh calls.
    *
    * @param accountId - Account ID to refresh
    * @param account - PoolAccount object
    * @returns Updated credentials or null if refresh failed
    */
   async getRefreshedCredentials(accountId: string, account: PoolAccount): Promise<any> {
+    // For kiro-oauth accounts, check cache first
+    if (account.provider === 'kiro-oauth') {
+      const cached = getCachedToken(accountId);
+      if (cached) {
+        console.log(`[AccountPool] Using cached token for ${accountId}`);
+        return cached;
+      }
+    }
+
     // Check if refresh is already in progress via deduplicator
     if (this.tokenRefreshDeduplicator.hasPending(accountId)) {
       // Wait for existing refresh to complete
       await this.tokenRefreshDeduplicator.runWithLock(accountId, async () => {});
       // Refresh already happened, re-fetch credentials
-      return this.keychainStore.retrieve(accountId);
+      const credentials = await this.keychainStore.retrieve(accountId);
+      // Cache the refreshed token
+      if (credentials && account.provider === 'kiro-oauth') {
+        cacheToken(accountId, credentials);
+      }
+      return credentials;
     }
 
     // Check if token needs refresh
@@ -748,6 +962,10 @@ export class AccountPoolManager {
 
     const provider = account.provider === 'kiro' ? 'kiro' : 'kiro-oauth';
     if (!needsTokenRefresh(credentials.expiresAt, provider)) {
+      // Cache the token if it's still valid
+      if (account.provider === 'kiro-oauth') {
+        cacheToken(accountId, credentials);
+      }
       return credentials; // No refresh needed
     }
 
@@ -757,8 +975,43 @@ export class AccountPoolManager {
         await this.authManager.refreshSession(account);
       });
       // Refresh completed, re-fetch credentials
-      return await this.keychainStore.retrieve(accountId);
+      const refreshedCredentials = await this.keychainStore.retrieve(accountId);
+      // Cache the refreshed token
+      if (refreshedCredentials && account.provider === 'kiro-oauth') {
+        cacheToken(accountId, refreshedCredentials);
+      }
+      return refreshedCredentials;
     } catch (error) {
+      // Invalidate cache on error
+      if (account.provider === 'kiro-oauth') {
+        invalidateCache(accountId);
+      }
+
+      // Check if error is unrecoverable
+      const unrecoverableResult = isUnrecoverableError(error);
+      if (unrecoverableResult.isUnrecoverable) {
+        console.error(
+          `[AccountPool] Unrecoverable error for account ${accountId}: ${unrecoverableResult.errorCode}`,
+          unrecoverableResult.message
+        );
+
+        // Mark account as permanently failed
+        this.markUnhealthy(accountId, `Unrecoverable error: ${unrecoverableResult.errorCode}`);
+
+        // Increment error count
+        if (account.provider === 'kiro-oauth') {
+          const kiroAccount = account as any;
+          kiroAccount.errorCount = (kiroAccount.errorCount || 0) + 1;
+        }
+
+        // Clear the deduplicator
+        this.tokenRefreshDeduplicator.clear(accountId);
+
+        throw new Error(
+          getUnrecoverableErrorMessage(unrecoverableResult.errorCode!)
+        );
+      }
+
       // Refresh failed, clear the deduplicator and re-throw
       this.tokenRefreshDeduplicator.clear(accountId);
       throw error;
@@ -940,7 +1193,7 @@ export class AccountPoolManager {
    * @returns Next available account selection result
    * @throws {NoHealthyAccountsError} If no healthy accounts available
    */
-  async failover(currentAccountId: string): Promise<AccountSelectionResult> {
+  async failover(currentAccountId: string, model?: string): Promise<AccountSelectionResult> {
     // Mark current account unhealthy
     this.markUnhealthy(currentAccountId, 'Failover triggered');
 
@@ -955,7 +1208,7 @@ export class AccountPoolManager {
 
     // Select next available account
     try {
-      return await this.selectAccount();
+      return await this.selectAccount(model);
     } catch (error) {
       if (error instanceof NoHealthyAccountsError) {
         throw error;

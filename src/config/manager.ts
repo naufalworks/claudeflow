@@ -150,6 +150,7 @@ export class ConfigurationManager {
         voyage: { ...base.infrastructure.voyage, ...(override.infrastructure?.voyage ?? {}) },
       },
       accounts: override.accounts ?? base.accounts,
+      routing: { ...base.routing, ...(override.routing ?? {}) },
       optimization: {
         semanticDeduplication: {
           ...base.optimization.semanticDeduplication,

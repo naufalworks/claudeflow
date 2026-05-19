@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 /**
- * CRITICAL REQUIREMENT: Raw Anthropic Format Only
- * 
- * ClaudeFlow ONLY supports sources that provide raw Anthropic API responses.
- * NO format conversion is supported anywhere in the system.
- * 
+ * CRITICAL REQUIREMENT: Anthropic client contract
+ *
+ * ClaudeFlow exposes Anthropic-compatible requests and responses to clients.
+ * Providers may use native adapters internally.
+ *
  * Supported account types:
  * - Direct Anthropic: Raw Anthropic format from api.anthropic.com
  * - Proxy: Anthropic-compatible proxies that forward raw Anthropic format unchanged (NOT 9router)
- * - OAuth: Raw Anthropic format with OAuth authentication (backward compatibility)
+ * - Kiro OAuth: Native Kiro API adapted to Anthropic format
  */
 
 // Direct Anthropic account schema
@@ -59,20 +59,24 @@ const OAuthAccountSchema = z.object({
 // Kiro OAuth account schema (NEW - direct Kiro OAuth, no 9router)
 // This replaces the legacy OAuthAccountSchema with direct OAuth 2.0 + PKCE authentication
 // Sensitive credentials (tokens, secrets) are stored in OS keychain, NOT in this schema
-const KiroOAuthAccountSchema = z.object({
-  id: z.string().regex(/^kiro-[a-f0-9]+$/, 'Must be format: kiro-{hash}'),
-  provider: z.literal('kiro-oauth'),
-  region: z.enum(['us-east-1', 'us-west-2', 'eu-central-1', 'ap-southeast-1']),
-  profileArn: z.string().regex(
-    /^arn:aws:codewhisperer:[a-z0-9-]+:[0-9]+:profile\/[a-zA-Z0-9-]+$/,
-    'Must be valid AWS ARN for CodeWhisperer profile'
-  ),
-  expiresAt: z.string().datetime(),
-  lastUsed: z.number().optional().default(0),
-  requestCount: z.number().int().nonnegative().optional().default(0),
-  errorCount: z.number().int().nonnegative().optional().default(0),
-  priority: z.number().int().min(0).max(100).optional().default(0),
-}).strict();
+const KiroOAuthAccountSchema = z
+  .object({
+    id: z.string().regex(/^kiro-[a-f0-9]+$/, 'Must be format: kiro-{hash}'),
+    provider: z.literal('kiro-oauth'),
+    region: z.enum(['us-east-1', 'us-west-2', 'eu-central-1', 'ap-southeast-1']),
+    profileArn: z
+      .string()
+      .regex(
+        /^arn:aws:codewhisperer:[a-z0-9-]+:[0-9]+:profile\/[a-zA-Z0-9-]+$/,
+        'Must be valid AWS ARN for CodeWhisperer profile'
+      ),
+    expiresAt: z.string().datetime(),
+    lastUsed: z.number().optional().default(0),
+    requestCount: z.number().int().nonnegative().optional().default(0),
+    errorCount: z.number().int().nonnegative().optional().default(0),
+    priority: z.number().int().min(0).max(100).optional().default(0),
+  })
+  .strict();
 
 // Discriminated union for type-safe account configuration
 const AccountSchema = z.discriminatedUnion('provider', [
@@ -90,7 +94,9 @@ export type KiroOAuthAccount = z.infer<typeof KiroOAuthAccountSchema>;
 export type Account = z.infer<typeof AccountSchema>;
 
 // Case-insensitive log level enum
-const LogLevelSchema = z.enum(['debug', 'info', 'warn', 'error']).transform((val) => val.toLowerCase());
+const LogLevelSchema = z
+  .enum(['debug', 'info', 'warn', 'error'])
+  .transform((val) => val.toLowerCase());
 
 export const ConfigSchema = z.object({
   server: z.object({
@@ -110,13 +116,17 @@ export const ConfigSchema = z.object({
     }),
   }),
   accounts: z.array(AccountSchema).default([]),
-  routing: z.object({
-    strategy: z.enum(['weighted-score', 'round-robin', 'sticky-round-robin']).default('weighted-score'),
-    stickyLimit: z.number().int().positive().default(3), // requests per account before switching
-  }).default({
-    strategy: 'weighted-score',
-    stickyLimit: 3,
-  }),
+  routing: z
+    .object({
+      strategy: z
+        .enum(['weighted-score', 'round-robin', 'sticky-round-robin'])
+        .default('weighted-score'),
+      stickyLimit: z.number().int().positive().default(3), // requests per account before switching
+    })
+    .default({
+      strategy: 'weighted-score',
+      stickyLimit: 3,
+    }),
   optimization: z.object({
     semanticDeduplication: z.object({
       enabled: z.boolean().default(true),

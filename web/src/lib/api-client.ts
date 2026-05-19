@@ -402,7 +402,10 @@ async function makeRequest<T>(
 
         // Retry network/timeouts, but don't retry handled HTTP/API errors.
         if (error instanceof APIError) {
-          if ((error.errorType === 'network_error' || error.errorType === 'timeout_error') && attempt < retries) {
+          if (
+            (error.errorType === 'network_error' || error.errorType === 'timeout_error') &&
+            attempt < retries
+          ) {
             const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
             await sleep(delay);
             continue;
@@ -444,20 +447,18 @@ export class ClaudeFlowAPIClient {
    * Get all accounts
    */
   async getAccounts(): Promise<{ accounts: AccountSummary[]; total: number }> {
-    return makeRequest<{ accounts: AccountSummary[]; total: number }>(
-      '/api/dashboard/accounts',
-      { method: 'GET' }
-    );
+    return makeRequest<{ accounts: AccountSummary[]; total: number }>('/api/dashboard/accounts', {
+      method: 'GET',
+    });
   }
 
   /**
    * Get account details by ID
    */
   async getAccountDetails(accountId: string): Promise<AccountDetails> {
-    return makeRequest<AccountDetails>(
-      `/api/dashboard/accounts/${encodeURIComponent(accountId)}`,
-      { method: 'GET' }
-    );
+    return makeRequest<AccountDetails>(`/api/dashboard/accounts/${encodeURIComponent(accountId)}`, {
+      method: 'GET',
+    });
   }
 
   async startKiroLogin(region: string = 'us-east-1'): Promise<{
@@ -488,20 +489,16 @@ export class ClaudeFlowAPIClient {
    * Get recent activity events
    */
   async getActivity(): Promise<{ events: ActivityEvent[]; total: number }> {
-    return makeRequest<{ events: ActivityEvent[]; total: number }>(
-      '/api/dashboard/activity',
-      { method: 'GET' }
-    );
+    return makeRequest<{ events: ActivityEvent[]; total: number }>('/api/dashboard/activity', {
+      method: 'GET',
+    });
   }
 
   /**
    * Get dashboard statistics
    */
   async getStats(): Promise<DashboardStats> {
-    return makeRequest<DashboardStats>(
-      '/api/dashboard/stats',
-      { method: 'GET' }
-    );
+    return makeRequest<DashboardStats>('/api/dashboard/stats', { method: 'GET' });
   }
 
   /**
@@ -526,10 +523,10 @@ export class ClaudeFlowAPIClient {
         expiresAt?: string;
         kiroCreditQuota?: KiroCreditQuota;
       };
-    }>(
-      `/api/dashboard/accounts/${encodeURIComponent(accountId)}/refresh`,
-      { method: 'POST' }
-    );
+    }>(`/api/dashboard/accounts/${encodeURIComponent(accountId)}/refresh`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   }
 
   /**
@@ -542,20 +539,14 @@ export class ClaudeFlowAPIClient {
     return makeRequest<{
       success: boolean;
       message: string;
-    }>(
-      `/api/dashboard/accounts/${encodeURIComponent(accountId)}`,
-      { method: 'DELETE' }
-    );
+    }>(`/api/dashboard/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
   }
 
   /**
    * Health check
    */
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
-    return makeRequest<{ status: string; timestamp: string }>(
-      '/health',
-      { method: 'GET' }
-    );
+    return makeRequest<{ status: string; timestamp: string }>('/health', { method: 'GET' });
   }
 
   /**
@@ -570,10 +561,7 @@ export class ClaudeFlowAPIClient {
       status: string;
       services: Record<string, boolean>;
       timestamp: string;
-    }>(
-      '/ready',
-      { method: 'GET' }
-    );
+    }>('/ready', { method: 'GET' });
   }
 }
 

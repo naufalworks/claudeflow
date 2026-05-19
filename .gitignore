@@ -25,6 +25,7 @@ pino-*.log
 # Testing
 coverage/
 .nyc_output/
+web/test-results/
 
 # IDE
 .vscode/
@@ -38,32 +39,43 @@ coverage/
 config.json
 !config.example.json
 
-# Temporary documentation (prevent bloat)
+# Backup files
+*.bak
+
+# Temporary / scratch documentation
 docs/archive/
 E2E_*.md
 PHASE_*.md
-MONOREPO_SETUP.md
+SESSION_*.md
 *_COMPLETE.md
 *_SUMMARY.md
 *_FIXED.md
-SESSION_*.md
-.audit/
 *.IMPLEMENTATION.md
 
-# Dev/scratch notes
+# Dev scratch notes
 AUTO_USAGE_TRACKING.md
 DAEMON_FIX.md
 DASHBOARD_FIXES.md
 DASHBOARD_ISSUES_EXPLAINED.md
 TRACKING_SYSTEM.md
 QUICK_START_MITM.md
-add-test-usage.js
+COMPLETE_GUIDE.md
+FINAL_STATUS.md
+FIXES_IMPLEMENTED.md
+FIX_IMPLEMENTATION_COMPLETE.md
+THE_REAL_FIX.md
+OPTIMIZATION_TEST_PLAN.md
+TESTING_CHECKLIST.md
+TESTING_DELIVERABLES.md
+TEST_EXECUTION_SUMMARY.md
+TESTING_README.md
 
-# External dependencies (have their own repos)
+# Kiro spec artifacts (development-only)
+.kiro/
+
+# External dependencies
 9router/
 
 # Test data
 test-data/
-
-# Kiro spec artifacts (development-only)
-.kiro/specs/
+.audit/

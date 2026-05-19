@@ -1,10 +1,10 @@
 /**
  * Secure credential storage using OS keychain with encrypted file fallback
- * 
+ *
  * Implements secure storage for OAuth tokens, refresh tokens, and client secrets.
  * Uses OS-native keychain (macOS Keychain, Windows Credential Manager, Linux libsecret)
  * with fallback to AES-256-GCM encrypted file for CI/CD environments.
- * 
+ *
  * Security measures:
  * - File permissions: 0o600 for files, 0o700 for directories
  * - Per-installation random salt
@@ -46,7 +46,7 @@ async function getKeytar(): Promise<typeof import('keytar') | null> {
 /**
  * Supported keychain backends
  */
-export type KeychainBackend = 
+export type KeychainBackend =
   | 'macos-keychain'
   | 'windows-credential-manager'
   | 'libsecret'
@@ -56,10 +56,10 @@ export type KeychainBackend =
  * Encryption parameters for file-based storage
  */
 interface EncryptedData {
-  iv: string;           // Hex-encoded initialization vector
-  authTag: string;      // Hex-encoded GCM authentication tag
-  encrypted: string;    // Hex-encoded encrypted data
-  accountId: string;    // Account identifier for verification
+  iv: string; // Hex-encoded initialization vector
+  authTag: string; // Hex-encoded GCM authentication tag
+  encrypted: string; // Hex-encoded encrypted data
+  accountId: string; // Account identifier for verification
 }
 
 /**
@@ -137,7 +137,17 @@ export class KeychainStore {
     }
 
     // Fall back to encrypted file
-    return this.retrieveFromFile(accountId);
+    try {
+      return await this.retrieveFromFile(accountId);
+    } catch (error: any) {
+      // If decryption fails, mark the file unusable and let callers skip it.
+      console.error(
+        `Failed to retrieve credentials for ${accountId}: ${error.message}`,
+        '\nStored credentials are unreadable and must be replaced.'
+      );
+      await this.markCorrupted(accountId).catch(() => {});
+      return null;
+    }
   }
 
   /**
@@ -170,7 +180,7 @@ export class KeychainStore {
     // If both failed, throw error
     if (errors.length === 2) {
       throw new Error(
-        `Failed to delete credentials for ${accountId}: ${errors.map(e => e.message).join(', ')}`
+        `Failed to delete credentials for ${accountId}: ${errors.map((e) => e.message).join(', ')}`
       );
     }
   }
@@ -207,7 +217,7 @@ export class KeychainStore {
    */
   detectBackend(): KeychainBackend {
     const platform = os.platform();
-    
+
     switch (platform) {
       case 'darwin':
         return 'macos-keychain';
@@ -238,9 +248,7 @@ export class KeychainStore {
   /**
    * Retrieve credentials from OS keychain
    */
-  private async retrieveFromKeychain(
-    accountId: string
-  ): Promise<KeychainCredentials | null> {
+  private async retrieveFromKeychain(accountId: string): Promise<KeychainCredentials | null> {
     const keychain = await getKeytar();
     if (!keychain) {
       return null;
@@ -261,10 +269,7 @@ export class KeychainStore {
   /**
    * Store credentials in encrypted file
    */
-  private async storeInFile(
-    accountId: string,
-    credentials: KeychainCredentials
-  ): Promise<void> {
+  private async storeInFile(accountId: string, credentials: KeychainCredentials): Promise<void> {
     // Ensure directory exists with secure permissions
     await this.ensureDirectoryExists();
 
@@ -277,10 +282,7 @@ export class KeychainStore {
     // Encrypt
     const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
     const plaintext = JSON.stringify(credentials);
-    const encrypted = Buffer.concat([
-      cipher.update(plaintext, 'utf8'),
-      cipher.final(),
-    ]);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
 
     // Create encrypted data structure
@@ -293,19 +295,13 @@ export class KeychainStore {
 
     // Write to file with secure permissions (0o600 = owner read/write only)
     const credentialsPath = await this.getCredentialsPath(accountId);
-    await fs.writeFile(
-      credentialsPath,
-      JSON.stringify(data, null, 2),
-      { mode: 0o600 }
-    );
+    await fs.writeFile(credentialsPath, JSON.stringify(data, null, 2), { mode: 0o600 });
   }
 
   /**
    * Retrieve credentials from encrypted file
    */
-  private async retrieveFromFile(
-    accountId: string
-  ): Promise<KeychainCredentials | null> {
+  private async retrieveFromFile(accountId: string): Promise<KeychainCredentials | null> {
     const credentialsPath = await this.getCredentialsPath(accountId);
 
     try {
@@ -328,10 +324,7 @@ export class KeychainStore {
       const decipher = crypto.createDecipheriv(this.ALGORITHM, key, iv);
       decipher.setAuthTag(authTag);
 
-      const decrypted = Buffer.concat([
-        decipher.update(encrypted),
-        decipher.final(),
-      ]);
+      const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
 
       // Parse and validate
       const credentials = JSON.parse(decrypted.toString('utf8'));
@@ -343,29 +336,42 @@ export class KeychainStore {
       if (error.code === 'ENOENT') {
         return null;
       }
-      
-      throw new Error(`Failed to retrieve credentials from file: ${error.message}`);
+
+      // Decryption failure - likely corrupted keychain
+      if (
+        error.message?.includes('unable to authenticate') ||
+        error.message?.includes('Unsupported state')
+      ) {
+        throw new Error(`Keychain decryption failed (corrupted): ${error.message}`);
+      }
+
+      throw error;
     }
   }
 
   /**
-   * Get encryption key derived from machine ID and salt
+   * Mark a keychain file as corrupted by renaming it
+   */
+  private async markCorrupted(accountId: string): Promise<void> {
+    const credentialsPath = await this.getCredentialsPath(accountId);
+    const corruptedPath = `${credentialsPath}.corrupted.${Date.now()}`;
+    await fs.rename(credentialsPath, corruptedPath).catch(() => {});
+    console.warn(`Moved corrupted keychain to: ${corruptedPath}`);
+  }
+
+  /**
+   * Get encryption key derived from a stable local passphrase and salt
    */
   private async getEncryptionKey(): Promise<Buffer> {
     // Get or create salt
     const salt = await this.getOrCreateSalt();
 
-    // Get machine ID
-    const machineId = this.getMachineId();
+    // Use a fixed passphrase instead of machine-specific ID
+    // This ensures the key stays the same even if hostname changes
+    const passphrase = 'claudeflow-encryption-key-v1';
 
     // Derive key using PBKDF2
-    const key = crypto.pbkdf2Sync(
-      machineId,
-      salt,
-      this.ITERATIONS,
-      this.KEY_LENGTH,
-      'sha256'
-    );
+    const key = crypto.pbkdf2Sync(passphrase, salt, this.ITERATIONS, this.KEY_LENGTH, 'sha256');
 
     return key;
   }
@@ -396,23 +402,6 @@ export class KeychainStore {
 
       return salt;
     }
-  }
-
-  /**
-   * Get machine ID for encryption key derivation
-   * Combines multiple entropy sources for uniqueness
-   */
-  private getMachineId(): string {
-    const hostname = os.hostname();
-    const username = os.userInfo().username;
-    const platform = os.platform();
-    const arch = os.arch();
-
-    // Combine entropy sources
-    const combined = `${hostname}:${username}:${platform}:${arch}:claudeflow`;
-
-    // Hash to get consistent length
-    return crypto.createHash('sha256').update(combined).digest('hex');
   }
 
   /**
@@ -448,7 +437,7 @@ export class KeychainStore {
       // Directory already exists, verify permissions
       const stats = await fs.stat(dir);
       const mode = stats.mode & 0o777;
-      
+
       if (mode !== 0o700) {
         console.warn(
           `Credentials directory ${dir} has insecure permissions ${mode.toString(8)}, expected 700`

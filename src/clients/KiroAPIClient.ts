@@ -9,7 +9,7 @@
  * - TLS 1.2+ enforcement with certificate validation
  * - Exponential backoff retry logic with jitter
  * - Comprehensive error classification
- * - Response format validation
+ * - Anthropic ↔ Kiro request/response transformation
  * - Region allowlist validation (SSRF prevention)
  * - Token sanitization in error messages
  *
@@ -21,23 +21,21 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { randomUUID } from 'crypto';
 import type { AnthropicRequest, AnthropicResponse } from '../types/anthropic.types';
+import { AnthropicToKiroTransformer } from '../transformers/AnthropicToKiroTransformer.js';
+import { KiroEventStreamDecoder } from '../transformers/KiroEventStreamDecoder.js';
+import { KiroToAnthropicTransformer } from '../transformers/KiroToAnthropicTransformer.js';
 import type { KiroAPIConfig, KiroAPIError } from '../types/kiro-oauth.types';
-import { ResponseFormatValidator } from './ResponseFormatValidator.js';
 import { createTLSAgent } from '../utils/tls-config.js';
 
 /**
  * Valid AWS regions for Kiro API
  * Strict allowlist to prevent SSRF attacks
  */
-const VALID_REGIONS = [
-  'us-east-1',
-  'us-west-2',
-  'eu-central-1',
-  'ap-southeast-1',
-] as const;
+const VALID_REGIONS = ['us-east-1', 'us-west-2', 'eu-central-1', 'ap-southeast-1'] as const;
 
-type ValidRegion = typeof VALID_REGIONS[number];
+type ValidRegion = (typeof VALID_REGIONS)[number];
 
 /**
  * KiroAPIClient class
@@ -46,7 +44,6 @@ type ValidRegion = typeof VALID_REGIONS[number];
  */
 export class KiroAPIClient {
   private readonly axiosInstance: AxiosInstance;
-  private readonly validator: ResponseFormatValidator;
 
   // Configuration constants
   private static readonly MAX_RETRIES = 3;
@@ -68,8 +65,6 @@ export class KiroAPIClient {
       // Disable automatic redirects for security
       maxRedirects: 0,
     });
-
-    this.validator = new ResponseFormatValidator();
   }
 
   /**
@@ -84,7 +79,8 @@ export class KiroAPIClient {
   async sendRequest(
     request: AnthropicRequest,
     accessToken: string,
-    config: KiroAPIConfig
+    config: KiroAPIConfig,
+    profileArn?: string
   ): Promise<AnthropicResponse & { __headers?: Record<string, string> }> {
     // Validate inputs
     this.validateAccessToken(accessToken);
@@ -95,29 +91,24 @@ export class KiroAPIClient {
     // Wrap in retry logic
     return this.retryWithBackoff(async () => {
       try {
-        const response = await this.axiosInstance.post<AnthropicResponse>(
-          endpoint,
-          request,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'anthropic-version': '2023-06-01',
-            },
-            timeout: config.timeout.read,
-          }
+        const transformer = new AnthropicToKiroTransformer();
+        const kiroRequest = transformer.transform(request, profileArn);
+
+        const response = await this.axiosInstance.post<ArrayBuffer>(endpoint, kiroRequest, {
+          headers: this.createHeaders(accessToken),
+          responseType: 'arraybuffer',
+          timeout: config.timeout.read * 1000, // Convert seconds to milliseconds
+        });
+
+        const anthropicResponse = this.decodeBufferedResponse(
+          Buffer.from(response.data as any),
+          request.model
         );
-
-        // Validate response format
-        if (!this.validator.isAnthropicFormat(response.data)) {
-          throw new Error(
-            'Invalid response format: Expected Anthropic format, got non-compliant response'
-          );
-        }
-
-        return Object.assign(response.data, { __headers: response.headers as Record<string, string> });
+        return Object.assign(anthropicResponse, {
+          __headers: response.headers as Record<string, string>,
+        });
       } catch (error) {
         if (axios.isAxiosError(error)) {
-          // Sanitize error before throwing
           const sanitized = this.sanitizeError(error);
           throw this.handleAxiosError(sanitized);
         }
@@ -138,7 +129,8 @@ export class KiroAPIClient {
   async *sendStreamingRequest(
     request: AnthropicRequest,
     accessToken: string,
-    config: KiroAPIConfig
+    config: KiroAPIConfig,
+    profileArn?: string
   ): AsyncIterable<string> {
     // Validate inputs
     this.validateAccessToken(accessToken);
@@ -147,32 +139,162 @@ export class KiroAPIClient {
     const endpoint = this.getEndpoint(config.region);
 
     try {
-      const response = await this.axiosInstance.post(
-        endpoint,
-        { ...request, stream: true },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'anthropic-version': '2023-06-01',
-          },
-          timeout: config.timeout.read,
-          responseType: 'stream',
-        }
-      );
+      const transformer = new AnthropicToKiroTransformer();
+      const kiroRequest = transformer.transform(request, profileArn);
 
-      // Stream response chunks
+      const response = await this.axiosInstance.post(endpoint, kiroRequest, {
+        headers: this.createHeaders(accessToken),
+        timeout: config.timeout.read * 1000,
+        responseType: 'stream',
+      });
+
       const stream = response.data;
+      const decoder = new KiroEventStreamDecoder();
+      const responseTransformer = new KiroToAnthropicTransformer(request.model);
+      let nextContentBlockIndex = 0;
+      let textBlockIndex: number | null = null;
+      let thinkingBlockIndex: number | null = null;
+      const toolBlockIndexes = new Map<string, { index: number; closed: boolean }>();
+
+      yield this.formatSSE('message_start', {
+        type: 'message_start',
+        message: {
+          id: responseTransformer.id,
+          type: 'message',
+          role: 'assistant',
+          content: [],
+          model: request.model,
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+      });
 
       for await (const chunk of stream) {
-        // Validate chunk encoding
         if (!Buffer.isBuffer(chunk)) {
           throw new Error('Invalid stream chunk: Expected Buffer');
         }
 
-        // Convert to UTF-8 string
-        const chunkStr = chunk.toString('utf-8');
-        yield chunkStr;
+        for (const event of decoder.push(chunk)) {
+          const eventType = event.headers[':event-type'] || '';
+          const eventPayload = event.payload?.[eventType] || event.payload;
+
+          if (
+            (eventType === 'assistantResponseEvent' || eventType === 'codeEvent') &&
+            eventPayload?.content
+          ) {
+            if (textBlockIndex === null) {
+              textBlockIndex = nextContentBlockIndex++;
+              yield this.formatSSE('content_block_start', {
+                type: 'content_block_start',
+                index: textBlockIndex,
+                content_block: { type: 'text', text: '' },
+              });
+            }
+            responseTransformer.processEventFrame(eventType, event.payload);
+            yield this.formatSSE('content_block_delta', {
+              type: 'content_block_delta',
+              index: textBlockIndex,
+              delta: { type: 'text_delta', text: eventPayload.content },
+            });
+          } else if (eventType === 'reasoningContentEvent' && eventPayload?.content) {
+            if (thinkingBlockIndex === null) {
+              thinkingBlockIndex = nextContentBlockIndex++;
+              yield this.formatSSE('content_block_start', {
+                type: 'content_block_start',
+                index: thinkingBlockIndex,
+                content_block: { type: 'thinking', thinking: '' },
+              });
+            }
+            responseTransformer.processEventFrame(eventType, event.payload);
+            yield this.formatSSE('content_block_delta', {
+              type: 'content_block_delta',
+              index: thinkingBlockIndex,
+              delta: { type: 'thinking_delta', thinking: eventPayload.content },
+            });
+          } else if (eventType === 'toolUseEvent' && eventPayload) {
+            const toolPayload = eventPayload.toolUseEvent || eventPayload.toolUses || eventPayload;
+            const toolUses = Array.isArray(toolPayload) ? toolPayload : [toolPayload];
+
+            responseTransformer.processEventFrame(eventType, event.payload);
+
+            for (const toolUse of toolUses) {
+              const toolUseId =
+                toolUse?.toolUseId || `toolu_${Date.now()}_${toolBlockIndexes.size}`;
+              let toolBlock = toolBlockIndexes.get(toolUseId);
+
+              if (!toolBlock) {
+                toolBlock = {
+                  index: nextContentBlockIndex++,
+                  closed: false,
+                };
+                toolBlockIndexes.set(toolUseId, toolBlock);
+
+                yield this.formatSSE('content_block_start', {
+                  type: 'content_block_start',
+                  index: toolBlock.index,
+                  content_block: {
+                    type: 'tool_use',
+                    id: toolUseId,
+                    name: toolUse?.name || '',
+                    input: {},
+                  },
+                });
+              }
+
+              const partialJson = this.getStreamingToolInputDelta(toolUse?.input);
+              if (partialJson) {
+                yield this.formatSSE('content_block_delta', {
+                  type: 'content_block_delta',
+                  index: toolBlock.index,
+                  delta: { type: 'input_json_delta', partial_json: partialJson },
+                });
+              }
+
+              if (toolUse?.stop && !toolBlock.closed) {
+                toolBlock.closed = true;
+                yield this.formatSSE('content_block_stop', {
+                  type: 'content_block_stop',
+                  index: toolBlock.index,
+                });
+              }
+            }
+          } else {
+            responseTransformer.processEventFrame(eventType, event.payload);
+          }
+        }
       }
+
+      const finalResponse = responseTransformer.finalize();
+      if (thinkingBlockIndex !== null) {
+        yield this.formatSSE('content_block_stop', {
+          type: 'content_block_stop',
+          index: thinkingBlockIndex,
+        });
+      }
+      if (textBlockIndex !== null) {
+        yield this.formatSSE('content_block_stop', {
+          type: 'content_block_stop',
+          index: textBlockIndex,
+        });
+      }
+      for (const toolBlock of toolBlockIndexes.values()) {
+        if (!toolBlock.closed) {
+          yield this.formatSSE('content_block_stop', {
+            type: 'content_block_stop',
+            index: toolBlock.index,
+          });
+        }
+      }
+      yield this.formatSSE('message_delta', {
+        type: 'message_delta',
+        delta: {
+          stop_reason: finalResponse.stop_reason,
+          stop_sequence: finalResponse.stop_sequence,
+        },
+        usage: { output_tokens: finalResponse.usage.output_tokens },
+      });
+      yield this.formatSSE('message_stop', { type: 'message_stop' });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         // Sanitize error before throwing
@@ -181,6 +303,43 @@ export class KiroAPIClient {
       }
       throw error;
     }
+  }
+
+  private createHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.amazon.eventstream',
+      'X-Amz-Target': 'AmazonCodeWhispererStreamingService.GenerateAssistantResponse',
+      'User-Agent': 'AWS-SDK-JS/3.0.0 kiro-ide/1.0.0',
+      'X-Amz-User-Agent': 'aws-sdk-js/3.0.0 kiro-ide/1.0.0',
+      'Amz-Sdk-Request': 'attempt=1; max=3',
+      'Amz-Sdk-Invocation-Id': randomUUID(),
+    };
+  }
+
+  private decodeBufferedResponse(buffer: Buffer, model: string): AnthropicResponse {
+    const decoder = new KiroEventStreamDecoder();
+    const transformer = new KiroToAnthropicTransformer(model);
+
+    for (const event of decoder.push(buffer)) {
+      transformer.processEventFrame(event.headers[':event-type'] || '', event.payload);
+    }
+
+    return transformer.finalize();
+  }
+
+  private formatSSE(event: string, data: unknown): string {
+    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  private getStreamingToolInputDelta(input: unknown): string {
+    if (!input) return '';
+    if (typeof input === 'string') return input;
+    if (typeof input === 'object' && !Array.isArray(input)) {
+      return JSON.stringify(input);
+    }
+    return '';
   }
 
   /**
@@ -223,12 +382,10 @@ export class KiroAPIClient {
   getEndpoint(region: string): string {
     // Validate region against strict allowlist
     if (!VALID_REGIONS.includes(region as ValidRegion)) {
-      throw new Error(
-        `Invalid region: ${region}. Must be one of: ${VALID_REGIONS.join(', ')}`
-      );
+      throw new Error(`Invalid region: ${region}. Must be one of: ${VALID_REGIONS.join(', ')}`);
     }
 
-    return `https://codewhisperer.${region}.amazonaws.com/v1/messages`;
+    return `https://codewhisperer.${region}.amazonaws.com/generateAssistantResponse`;
   }
 
   /**
@@ -455,11 +612,11 @@ export class KiroAPIClient {
     // Remove Authorization header from error config
     if (error.config?.headers) {
       const sanitizedConfig = { ...error.config };
-      
+
       // Create new headers object without Authorization
       const headers = error.config.headers;
       const sanitizedHeaders: Record<string, string> = {};
-      
+
       // Copy all headers except Authorization variants
       for (const key in headers) {
         if (key.toLowerCase() !== 'authorization') {

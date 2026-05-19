@@ -188,7 +188,11 @@ export class TokenManager {
         credentials
       );
 
-      logger.info('Starting token refresh', { accountId, mode: modeConfig.mode, endpoint: tokenEndpoint });
+      logger.info('Starting token refresh', {
+        accountId,
+        mode: modeConfig.mode,
+        endpoint: tokenEndpoint,
+      });
 
       // Make HTTP POST request
       const response = await this.makeRefreshRequest(tokenEndpoint, requestBody);
@@ -221,7 +225,10 @@ export class TokenManager {
       // Property 8: Mark as re-auth-required on 401/403
       if (this.isAuthError(error)) {
         state.status = 're-auth-required';
-        logger.warn('Authentication failed, re-auth required', { accountId, statusCode: error.response?.status });
+        logger.warn('Authentication failed, re-auth required', {
+          accountId,
+          statusCode: error.response?.status,
+        });
         throw new AuthenticationError(accountId, 'Token refresh failed with 401/403');
       }
 
@@ -231,7 +238,7 @@ export class TokenManager {
         logger.warn('Retryable error, will retry after delay', {
           accountId,
           retryCount: state.retryCount,
-          delayMs: delay
+          delayMs: delay,
         });
 
         state.retryCount++;
@@ -264,9 +271,7 @@ export class TokenManager {
     logger.info('Starting parallel refresh', { count: accountIds.length });
 
     // Use Promise.allSettled for parallel execution
-    const results = await Promise.allSettled(
-      accountIds.map(id => this.refresh(id))
-    );
+    const results = await Promise.allSettled(accountIds.map((id) => this.refresh(id)));
 
     // Build result map
     const resultMap = new Map<string, TokenRefreshResult>();
@@ -281,7 +286,7 @@ export class TokenManager {
         // Log error but don't throw - partial success is OK
         logger.error('Refresh failed for account', {
           accountId,
-          error: result.reason?.message || String(result.reason)
+          error: result.reason?.message || String(result.reason),
         });
 
         // Add failed result
@@ -299,7 +304,7 @@ export class TokenManager {
 
     logger.info('Parallel refresh completed', {
       total: accountIds.length,
-      successful: Array.from(resultMap.values()).filter(r => r.success).length
+      successful: Array.from(resultMap.values()).filter((r) => r.success).length,
     });
 
     return resultMap;
@@ -319,7 +324,8 @@ export class TokenManager {
       const credentials = await this.keychainStore.retrieve(accountId);
 
       if (!credentials) {
-        return false; // No credentials = can't refresh
+        logger.warn('No stored credentials found for account; refresh skipped', { accountId });
+        return false;
       }
 
       // Parse expiry time
@@ -336,7 +342,7 @@ export class TokenManager {
         logger.debug('Token needs refresh', {
           accountId,
           expiresAt: expiresAt.toISOString(),
-          minutesUntilExpiry: Math.floor(timeUntilExpiry / 60000)
+          minutesUntilExpiry: Math.floor(timeUntilExpiry / 60000),
         });
       }
 
@@ -532,7 +538,8 @@ export class TokenManager {
     existingCredentials: KeychainCredentials
   ): KeychainCredentials {
     const accessToken = data.access_token || data.accessToken;
-    const refreshToken = data.refresh_token || data.refreshToken || existingCredentials.refreshToken;
+    const refreshToken =
+      data.refresh_token || data.refreshToken || existingCredentials.refreshToken;
 
     // Validate response structure. AWS OIDC returns camelCase; Kiro desktop/social
     // may return snake_case.
@@ -571,7 +578,11 @@ export class TokenManager {
   private isRetryableError(error: any): boolean {
     if (error instanceof AxiosError) {
       // Network error
-      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      if (
+        error.code === 'ECONNREFUSED' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ENOTFOUND'
+      ) {
         return true;
       }
 
@@ -587,7 +598,7 @@ export class TokenManager {
    * Sleep for specified milliseconds
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -595,9 +606,13 @@ export class TokenManager {
    */
   private async getAccountRegion(accountId: string): Promise<string> {
     const config = this.configManager.getConfig();
-    const account = config.accounts.find((a: any) =>
-      a.id === accountId ||
-      (a.provider === 'kiro-oauth' && a.profileArn && `kiro-${createHash('sha256').update(a.profileArn).digest('hex').substring(0, 16)}` === accountId)
+    const account = config.accounts.find(
+      (a: any) =>
+        a.id === accountId ||
+        (a.provider === 'kiro-oauth' &&
+          a.profileArn &&
+          `kiro-${createHash('sha256').update(a.profileArn).digest('hex').substring(0, 16)}` ===
+            accountId)
     );
 
     if (!account) {
@@ -606,7 +621,9 @@ export class TokenManager {
 
     // Check if this is a KiroOAuthAccount
     if (account.provider !== 'kiro-oauth') {
-      throw new Error(`Account ${accountId} is not a Kiro OAuth account (provider: ${account.provider})`);
+      throw new Error(
+        `Account ${accountId} is not a Kiro OAuth account (provider: ${account.provider})`
+      );
     }
 
     // Extract region (KiroOAuthAccount has region field)
@@ -623,8 +640,6 @@ export class TokenManager {
    */
   private async getAllAccountIds(): Promise<string[]> {
     const config = this.configManager.getConfig();
-    return config.accounts
-      .filter(a => a.provider === 'kiro-oauth')
-      .map(a => a.id);
+    return config.accounts.filter((a) => a.provider === 'kiro-oauth').map((a) => a.id);
   }
 }

@@ -182,9 +182,9 @@ export interface KiroAPIConfig {
   region: string;
   /** Connection timeouts */
   timeout: {
-    /** Connection timeout in milliseconds (default: 10000) */
+    /** Connection timeout in seconds (default: 10) */
     connect: number;
-    /** Read timeout in milliseconds (default: 60000) */
+    /** Read timeout in seconds (default: 60) */
     read: number;
   };
   /** Maximum retry attempts (default: 3) */

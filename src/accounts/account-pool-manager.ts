@@ -361,7 +361,6 @@ export class AccountPoolManager {
    * Select account using weighted score strategy (original logic)
    */
   private async selectAccountWeightedScore(model?: string): Promise<AccountSelectionResult> {
-
     // Stage 1: Filter by circuit breaker state
     let availableAccounts = Array.from(this.accounts.values()).filter((account) => {
       // For kiro-oauth accounts, check circuit breaker
@@ -385,6 +384,38 @@ export class AccountPoolManager {
       }
       return true;
     });
+
+    // Stage 2.5: Filter by credential availability (for kiro-oauth accounts).
+    // Expired access tokens are still selectable when a refresh token exists.
+    const accountsWithCredentials: typeof availableAccounts = [];
+    for (const account of availableAccounts) {
+      if (account.provider === 'kiro-oauth') {
+        const credentials = await this.keychainStore.retrieve(account.id);
+        if (!credentials) {
+          console.warn(
+            `[AccountPool] Skipping account ${account.id}: no stored Kiro OAuth credentials`
+          );
+          continue;
+        }
+
+        if (!credentials.accessToken && !credentials.refreshToken) {
+          console.warn(
+            `[AccountPool] Skipping account ${account.id}: stored credentials contain no usable token`
+          );
+          continue;
+        }
+
+        const expiresAt = credentials.expiresAt ? Date.parse(credentials.expiresAt) : NaN;
+        if (Number.isFinite(expiresAt) && expiresAt < Date.now() && !credentials.refreshToken) {
+          console.warn(
+            `[AccountPool] Skipping account ${account.id}: access token expired and refresh token is missing`
+          );
+          continue;
+        }
+      }
+      accountsWithCredentials.push(account);
+    }
+    availableAccounts = accountsWithCredentials;
 
     // Stage 3: Filter by rate limit status
     availableAccounts = availableAccounts.filter((account) => {
@@ -488,7 +519,9 @@ export class AccountPoolManager {
             if (scoredAccounts.length > 1) {
               return scoredAccounts[1];
             }
-            throw new Error(`Failed to refresh token for ${selectedAccount.id}: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error(
+              `Failed to refresh token for ${selectedAccount.id}: ${error instanceof Error ? error.message : String(error)}`
+            );
           }
         }
       }
@@ -552,7 +585,7 @@ export class AccountPoolManager {
 
     // Check if we should stick with current account
     if (this.stickyAccountId && this.stickyRequestCount < stickyLimit) {
-      const stickyAccount = availableAccounts.find(a => a.id === this.stickyAccountId);
+      const stickyAccount = availableAccounts.find((a) => a.id === this.stickyAccountId);
       if (stickyAccount) {
         this.stickyRequestCount++;
         await this.checkAndRefreshToken(stickyAccount);
@@ -647,7 +680,9 @@ export class AccountPoolManager {
           try {
             await this.refreshTokenWithLock(account.id, account);
           } catch (error) {
-            throw new Error(`Failed to refresh token for ${account.id}: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error(
+              `Failed to refresh token for ${account.id}: ${error instanceof Error ? error.message : String(error)}`
+            );
           }
         }
       }
@@ -712,14 +747,19 @@ export class AccountPoolManager {
               }
 
               // Send request via KiroAPIClient
-              response = await this.kiroApiClient.sendRequest(request, credentials.accessToken, {
-                region: kiroAccount.region,
-                timeout: {
-                  connect: 10,
-                  read: 60,
+              response = await this.kiroApiClient.sendRequest(
+                request,
+                credentials.accessToken,
+                {
+                  region: kiroAccount.region,
+                  timeout: {
+                    connect: 10,
+                    read: 60,
+                  },
+                  retries: 3,
                 },
-                retries: 3,
-              });
+                kiroAccount.profileArn
+              );
               await this.updateKiroCreditQuotaFromHeaders(account.id, (response as any).__headers);
               delete (response as any).__headers;
 
@@ -999,9 +1039,7 @@ export class AccountPoolManager {
             kiroAccount.errorCount = (kiroAccount.errorCount || 0) + 1;
           }
 
-          throw new Error(
-            getUnrecoverableErrorMessage(unrecoverableResult.errorCode!)
-          );
+          throw new Error(getUnrecoverableErrorMessage(unrecoverableResult.errorCode!));
         }
         throw error;
       } finally {
@@ -1031,7 +1069,6 @@ export class AccountPoolManager {
     if (account.provider === 'kiro-oauth') {
       const cached = getCachedToken(accountId);
       if (cached) {
-        console.log(`[AccountPool] Using cached token for ${accountId}`);
         return cached;
       }
     }
@@ -1105,9 +1142,7 @@ export class AccountPoolManager {
         // Clear the deduplicator
         this.tokenRefreshDeduplicator.clear(accountId);
 
-        throw new Error(
-          getUnrecoverableErrorMessage(unrecoverableResult.errorCode!)
-        );
+        throw new Error(getUnrecoverableErrorMessage(unrecoverableResult.errorCode!));
       }
 
       // Refresh failed, clear the deduplicator and re-throw
@@ -1154,7 +1189,10 @@ export class AccountPoolManager {
    * @param latency - Request latency in milliseconds
    * @param success - Whether request was successful
    */
-  async updateKiroCreditQuotaFromHeaders(accountId: string, headers?: Record<string, string>): Promise<void> {
+  async updateKiroCreditQuotaFromHeaders(
+    accountId: string,
+    headers?: Record<string, string>
+  ): Promise<void> {
     const account = this.accounts.get(accountId);
     if (!account || !headers) return;
 
@@ -1197,10 +1235,18 @@ export class AccountPoolManager {
       /(quota|limit|remaining|reset|credit|rate)/i.test(key)
     );
     if (quotaHeaderNames.length > 0) {
-      console.log(`[KiroQuota] observed quota-like headers for ${accountId}: ${quotaHeaderNames.join(', ')}`);
+      console.log(
+        `[KiroQuota] observed quota-like headers for ${accountId}: ${quotaHeaderNames.join(', ')}`
+      );
     }
 
-    if (limit === undefined || remaining === undefined || limit <= 0 || remaining < 0 || remaining > limit) {
+    if (
+      limit === undefined ||
+      remaining === undefined ||
+      limit <= 0 ||
+      remaining < 0 ||
+      remaining > limit
+    ) {
       return;
     }
 
@@ -1222,16 +1268,18 @@ export class AccountPoolManager {
   }
 
   async loadKiroCreditQuotaFromRedis(): Promise<void> {
-    await Promise.all(Array.from(this.accounts.values()).map(async (account) => {
-      if (account.provider !== 'kiro-oauth') return;
-      const data = await this.redisClient.getClient().get(`kiro:quota:${account.id}`);
-      if (!data) return;
-      try {
-        account.kiroCreditQuota = JSON.parse(data) as KiroCreditQuota;
-      } catch {
-        // ignore malformed cache
-      }
-    }));
+    await Promise.all(
+      Array.from(this.accounts.values()).map(async (account) => {
+        if (account.provider !== 'kiro-oauth') return;
+        const data = await this.redisClient.getClient().get(`kiro:quota:${account.id}`);
+        if (!data) return;
+        try {
+          account.kiroCreditQuota = JSON.parse(data) as KiroCreditQuota;
+        } catch {
+          // ignore malformed cache
+        }
+      })
+    );
   }
 
   private readNestedNumber(data: any, paths: string[][]): number | undefined {
@@ -1354,20 +1402,30 @@ export class AccountPoolManager {
           ['credits', 'remaining'],
           ['usage', 'remaining'],
         ]);
-        normalizedResetTime = normalizedResetTime ?? this.readNestedTime(item, [
-          ['resetDate'],
-          ['resetTime'],
-          ['nextDateReset'],
-          ['freeTrialInfo', 'freeTrialExpiry'],
-        ]);
+        normalizedResetTime =
+          normalizedResetTime ??
+          this.readNestedTime(item, [
+            ['resetDate'],
+            ['resetTime'],
+            ['nextDateReset'],
+            ['freeTrialInfo', 'freeTrialExpiry'],
+          ]);
         if (normalizedLimit && normalizedLimit > 0) break;
       }
     }
 
-    if (normalizedLimit !== undefined && normalizedRemaining === undefined && normalizedUsed !== undefined) {
+    if (
+      normalizedLimit !== undefined &&
+      normalizedRemaining === undefined &&
+      normalizedUsed !== undefined
+    ) {
       normalizedRemaining = Math.max(0, normalizedLimit - normalizedUsed);
     }
-    if (normalizedLimit !== undefined && normalizedUsed === undefined && normalizedRemaining !== undefined) {
+    if (
+      normalizedLimit !== undefined &&
+      normalizedUsed === undefined &&
+      normalizedRemaining !== undefined
+    ) {
       normalizedUsed = Math.max(0, normalizedLimit - normalizedRemaining);
     }
 
@@ -1399,11 +1457,7 @@ export class AccountPoolManager {
       ? Math.max(300, Math.min(3600, Math.floor((quota.resetTime - Date.now()) / 1000)))
       : 900;
 
-    await this.redisClient.getClient().setex(
-      `kiro:quota:${accountId}`,
-      ttl,
-      JSON.stringify(quota)
-    );
+    await this.redisClient.getClient().setex(`kiro:quota:${accountId}`, ttl, JSON.stringify(quota));
   }
 
   async refreshKiroCreditQuota(accountId: string): Promise<KiroCreditQuota | undefined> {
@@ -1438,54 +1492,54 @@ export class AccountPoolManager {
     }> = [
       {
         name: 'codewhisperer-get',
-        run: () => axios.get(
-          `https://codewhisperer.${region}.amazonaws.com/getUsageLimits?${getUsageParams.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${credentials.accessToken}`,
-              Accept: 'application/json',
-              'User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
-              'X-Amz-User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
-            },
-            timeout: 15000,
-            maxRedirects: 0,
-          }
-        ),
+        run: () =>
+          axios.get(
+            `https://codewhisperer.${region}.amazonaws.com/getUsageLimits?${getUsageParams.toString()}`,
+            {
+              headers: {
+                Authorization: `Bearer ${credentials.accessToken}`,
+                Accept: 'application/json',
+                'User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
+                'X-Amz-User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
+              },
+              timeout: 15000,
+              maxRedirects: 0,
+            }
+          ),
       },
       {
         name: 'codewhisperer-post',
-        run: () => axios.post(
-          `https://codewhisperer.${region}.amazonaws.com`,
-          {
-            origin: 'AI_EDITOR',
-            profileArn,
-            resourceType: 'AGENTIC_REQUEST',
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${credentials.accessToken}`,
-              'Content-Type': 'application/x-amz-json-1.0',
-              'X-Amz-Target': 'AmazonCodeWhispererService.GetUsageLimits',
-              Accept: 'application/json',
+        run: () =>
+          axios.post(
+            `https://codewhisperer.${region}.amazonaws.com`,
+            {
+              origin: 'AI_EDITOR',
+              profileArn,
+              resourceType: 'AGENTIC_REQUEST',
             },
-            timeout: 15000,
-            maxRedirects: 0,
-          }
-        ),
+            {
+              headers: {
+                Authorization: `Bearer ${credentials.accessToken}`,
+                'Content-Type': 'application/x-amz-json-1.0',
+                'X-Amz-Target': 'AmazonCodeWhispererService.GetUsageLimits',
+                Accept: 'application/json',
+              },
+              timeout: 15000,
+              maxRedirects: 0,
+            }
+          ),
       },
       {
         name: 'q-get',
-        run: () => axios.get(
-          `https://q.${region}.amazonaws.com/getUsageLimits?${qUsageParams.toString()}`,
-          {
+        run: () =>
+          axios.get(`https://q.${region}.amazonaws.com/getUsageLimits?${qUsageParams.toString()}`, {
             headers: {
               Authorization: `Bearer ${credentials.accessToken}`,
               Accept: 'application/json',
             },
             timeout: 15000,
             maxRedirects: 0,
-          }
-        ),
+          }),
       },
     ];
 
@@ -1496,10 +1550,14 @@ export class AccountPoolManager {
         const quota = this.normalizeKiroCreditQuota(response.data);
         if (quota) {
           await this.storeKiroCreditQuota(accountId, quota);
-          console.log(`[KiroQuota] refreshed credits for ${accountId} from ${endpoint.name}: ${quota.remaining}/${quota.limit}`);
+          console.log(
+            `[KiroQuota] refreshed credits for ${accountId} from ${endpoint.name}: ${quota.remaining}/${quota.limit}`
+          );
           return quota;
         }
-        console.warn(`[KiroQuota] quota response did not contain recognized credit fields for ${accountId}`);
+        console.warn(
+          `[KiroQuota] quota response did not contain recognized credit fields for ${accountId}`
+        );
       } catch (error) {
         lastError = error;
       }
@@ -1507,24 +1565,33 @@ export class AccountPoolManager {
 
     if (lastError) {
       const status = axios.isAxiosError(lastError) ? lastError.response?.status : undefined;
-      const responseData = axios.isAxiosError(lastError) ? JSON.stringify(lastError.response?.data || {}) : '';
+      const responseData = axios.isAxiosError(lastError)
+        ? JSON.stringify(lastError.response?.data || {})
+        : '';
       const message = lastError instanceof Error ? lastError.message : String(lastError);
-      console.warn(`[KiroQuota] failed to refresh credits for ${accountId}: ${status || 'no-status'} ${LogSanitizer.sanitize(message)} ${LogSanitizer.sanitize(responseData)}`.trim());
+      console.warn(
+        `[KiroQuota] failed to refresh credits for ${accountId}: ${status || 'no-status'} ${LogSanitizer.sanitize(message)} ${LogSanitizer.sanitize(responseData)}`.trim()
+      );
     }
     return undefined;
   }
 
   async refreshStaleKiroCreditQuotas(maxAgeMs: number = 15 * 60 * 1000): Promise<void> {
-    await Promise.all(Array.from(this.accounts.values()).map(async (account) => {
-      if (account.provider !== 'kiro-oauth') return;
-      if (account.kiroCreditQuota && Date.now() - account.kiroCreditQuota.updatedAt < maxAgeMs) return;
-      try {
-        await this.refreshKiroCreditQuota(account.id);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[KiroQuota] skipped quota refresh for ${account.id}: ${LogSanitizer.sanitize(message)}`);
-      }
-    }));
+    await Promise.all(
+      Array.from(this.accounts.values()).map(async (account) => {
+        if (account.provider !== 'kiro-oauth') return;
+        if (account.kiroCreditQuota && Date.now() - account.kiroCreditQuota.updatedAt < maxAgeMs)
+          return;
+        try {
+          await this.refreshKiroCreditQuota(account.id);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[KiroQuota] skipped quota refresh for ${account.id}: ${LogSanitizer.sanitize(message)}`
+          );
+        }
+      })
+    );
   }
 
   async updatePerformance(accountId: string, latency: number, success: boolean): Promise<void> {

@@ -20,8 +20,8 @@ export class QdrantClientWrapper {
       console.log('✅ Qdrant connected successfully');
     } catch (error) {
       this.connected = false;
-      console.error('❌ Qdrant connection failed:', error);
-      throw error;
+      console.warn('⚠️ Qdrant unavailable; semantic cache disabled until Qdrant starts.');
+      return;
     }
   }
 
@@ -57,8 +57,9 @@ export class QdrantClientWrapper {
         console.log(`✅ Created Qdrant collection: ${collectionName}`);
       }
     } catch (error) {
-      console.error(`❌ Failed to ensure collection ${collectionName}:`, error);
-      throw error;
+      this.connected = false;
+      console.warn(`⚠️ Qdrant collection ${collectionName} not ready; semantic cache disabled until Qdrant starts.`);
+      return;
     }
   }
 }

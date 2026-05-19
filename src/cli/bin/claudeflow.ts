@@ -21,6 +21,13 @@ const CLI_VERSION = '0.1.0';
  */
 async function main(): Promise<void> {
   try {
+    // If no command provided, start server and show interface menu
+    if (!process.argv.slice(2).length) {
+      const { startServerAndShowMenu } = await import('../ui/interface-menu.js');
+      await startServerAndShowMenu();
+      return;
+    }
+
     // Set up program metadata
     program
       .name('claudeflow')
@@ -31,21 +38,23 @@ async function main(): Promise<void> {
     // Global options
     program
       .option('--debug', 'Enable debug mode')
-      .option('--profile <name>', 'Use specific configuration profile');
+      .option('--profile <name>', 'Use specific configuration profile')
+      .option('-b, --background', 'Start daemon in background and exit')
+      .option('--no-browser', 'Don\'t auto-open browser')
+      .option('--port <port>', 'Custom port (default: 20129)', parseInt);
 
     // Setup commands (will be added in later tasks)
     await setupCommands(program);
 
-    // Parse arguments
-    await program.parseAsync(process.argv);
-
-    // Show help if no command provided
-    if (!process.argv.slice(2).length) {
-      // Show interactive main menu
-      const { showMainMenu } = await import('../ui/main-menu.js');
-      await showMainMenu();
+    // Handle --background flag before parsing
+    if (process.argv.includes('-b') || process.argv.includes('--background')) {
+      const { daemonStartCommand } = await import('../commands/daemon.js');
+      await daemonStartCommand();
       return;
     }
+
+    // Parse arguments
+    await program.parseAsync(process.argv);
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error instanceof Error ? error.message : String(error));
     process.exit(1);

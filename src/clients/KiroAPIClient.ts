@@ -85,7 +85,7 @@ export class KiroAPIClient {
     request: AnthropicRequest,
     accessToken: string,
     config: KiroAPIConfig
-  ): Promise<AnthropicResponse> {
+  ): Promise<AnthropicResponse & { __headers?: Record<string, string> }> {
     // Validate inputs
     this.validateAccessToken(accessToken);
     this.validateRequest(request);
@@ -114,7 +114,7 @@ export class KiroAPIClient {
           );
         }
 
-        return response.data;
+        return Object.assign(response.data, { __headers: response.headers as Record<string, string> });
       } catch (error) {
         if (axios.isAxiosError(error)) {
           // Sanitize error before throwing

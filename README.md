@@ -1,313 +1,135 @@
 # ClaudeFlow
 
-**Intelligent API router for Anthropic's Claude models with 1000+ account support, automatic token refresh, and MITM proxy.**
+ClaudeFlow is an Anthropic-compatible routing service for Claude requests. It keeps the native Anthropic request and response format end to end while adding account pooling, Kiro OAuth support, quota-aware routing, caching, analytics, and a web dashboard.
 
-[![Status](https://img.shields.io/badge/status-production%20ready-brightgreen)]()
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue)]()
+The project is split into two applications:
 
-## 🎯 What is ClaudeFlow?
+- API and CLI service: TypeScript, Fastify, Redis, Qdrant, OS keychain storage.
+- Web dashboard: Next.js app under `web/`.
 
-ClaudeFlow is an intelligent API router that allows you to:
-- **Use 1000+ Kiro accounts** with smart routing (quota-aware, priority-based)
-- **Never login again** - automatic token refresh every 60 seconds
-- **Intercept Kiro CLI/IDE** - MITM proxy for transparent request routing
-- **Preserve 100% of Claude features** - native Anthropic format (not OpenAI like 9router)
+## Core Capabilities
 
-## 🚀 Quick Start (5 Minutes)
+- Native Anthropic `/v1/messages` compatibility.
+- Direct Anthropic API key routing.
+- Kiro OAuth account routing with automatic token refresh.
+- Live Kiro credit quota refresh via CodeWhisperer usage endpoints.
+- Redis-backed quota and routing state.
+- Semantic request deduplication through Qdrant and Voyage embeddings.
+- Dashboard API for accounts, analytics, activity, and health.
+- Optional MITM mode for advanced Kiro CLI/IDE interception.
+
+## Requirements
+
+- Node.js 18 or newer.
+- npm.
+- Redis for runtime state.
+- Qdrant for semantic cache features.
+- Voyage API key if semantic deduplication is enabled.
+- OpenSSL and elevated privileges only when using MITM mode.
+
+## Quick Start
 
 ```bash
-# 1. Install MITM proxy
-sudo claudeflow mitm install
-
-# 2. Add Kiro accounts
-for i in {1..1000}; do
-  claudeflow login --method builder-id --region us-east-1
-done
-
-# 3. Start MITM proxy
-sudo claudeflow daemon start --mitm
-
-# 4. Use Kiro CLI normally
-kiro chat "Hello, Claude!"
+npm install
+cd web && npm install && cd ..
+cp .env.example .env
+npm run dev
 ```
 
-**That's it!** Kiro CLI/IDE now uses ClaudeFlow's 1000+ account pool automatically.
+Default local endpoints:
 
-## ✨ Features
+- API: `http://localhost:20129`
+- Web dashboard: `http://localhost:3001`
 
-### 🔐 Authentication
-- ✅ AWS Device Code Flow (same as 9router)
-- ✅ Automatic token refresh (60s interval, 5min buffer)
-- ✅ OS Keychain storage (encrypted, more secure than 9router)
-- ✅ Multiple login methods (Builder ID, SSO, token import)
+## API Usage
 
-### 🎯 Smart Routing
-- ✅ Quota-aware routing (avoid rate-limited accounts)
-- ✅ Priority-based routing (use high-priority accounts first)
-- ✅ Health monitoring (circuit breaker + health checks)
-- ✅ Round-robin fallback (fair distribution)
-
-### 🔒 MITM Proxy
-- ✅ Intercepts Kiro CLI/IDE requests
-- ✅ CA certificate + system trust store
-- ✅ /etc/hosts modification
-- ✅ HTTPS server on port 443
-- ✅ Transparent to applications
-
-### 🎁 Native Anthropic Format
-- ✅ 100% feature preservation (vs 9router's 40-60% loss)
-- ✅ Thinking blocks
-- ✅ Prompt caching (90% cost reduction)
-- ✅ Extended context (200K tokens)
-- ✅ Tool use (native format)
-- ✅ Vision (native format)
-
-## 📊 ClaudeFlow vs 9router
-
-| Feature | 9router | ClaudeFlow |
-|---------|---------|------------|
-| **Response Format** | ❌ OpenAI (40-60% lost) | ✅ Native Anthropic (100%) |
-| **Thinking Blocks** | ❌ Lost | ✅ Preserved |
-| **Prompt Caching** | ❌ Lost | ✅ Preserved (90% savings) |
-| **Token Storage** | ❌ File-based (plain text) | ✅ OS Keychain (encrypted) |
-| **Account Routing** | ❌ Basic round-robin | ✅ Smart (quota-aware) |
-| **Health Monitoring** | ❌ None | ✅ Circuit breaker + health |
-| **Token Refresh** | ✅ Automatic | ✅ Automatic (better) |
-| **MITM Proxy** | ✅ Yes | ✅ Yes |
-
-## 📖 Documentation
-
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture overview
-- **[docs/API.md](docs/API.md)** - API reference
-- **[docs/CLI.md](docs/CLI.md)** - CLI commands
-- **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** - Configuration guide
-- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Deployment guide
-- **[docs/DEVELOPER.md](docs/DEVELOPER.md)** - Developer guide
-- **[docs/MITM_PROXY.md](docs/MITM_PROXY.md)** - MITM proxy guide
-- **[docs/MIGRATION.md](docs/MIGRATION.md)** - Migration guide
-
-## 🎮 Usage
-
-### Mode 1: Direct API (No MITM)
-
-Use ClaudeFlow as a direct API endpoint:
+Point an Anthropic SDK client at the ClaudeFlow API server:
 
 ```python
 import anthropic
 
 client = anthropic.Anthropic(
-    api_key="dummy",
-    base_url="http://localhost:20129"
+    api_key="your-claudeflow-api-key",
+    base_url="http://localhost:20129",
 )
 
 response = client.messages.create(
     model="claude-sonnet-4-20250514",
     max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello!"}]
+    messages=[{"role": "user", "content": "Hello"}],
 )
 ```
 
-### Mode 2: MITM Proxy (Intercept Kiro CLI/IDE)
+ClaudeFlow expects native Anthropic format. Proxies that convert to OpenAI-compatible responses are not supported.
 
-Intercept Kiro CLI/IDE requests automatically:
-
-```bash
-# Setup once
-sudo claudeflow mitm install
-claudeflow login  # Add accounts
-sudo claudeflow daemon start --mitm
-
-# Use Kiro CLI normally
-kiro chat "Hello, Claude!"
-kiro chat "Write a Python script"
-kiro chat "Explain this code"
-
-# All requests automatically routed through ClaudeFlow
-```
-
-## 🛠️ Installation
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- OpenSSL (for MITM proxy)
-- sudo access (for MITM proxy)
-
-### Build from Source
+## Development Commands
 
 ```bash
-# Clone repository
-git clone https://github.com/naufalworks/claudeflow.git
-cd claudeflow
-
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run
-./dist/cli/bin/claudeflow.js --version
+npm run dev          # API + web dashboard
+npm run dev:api      # API only
+npm run dev:web      # web dashboard only
+npm run build:api    # compile API/CLI
+npm run build:web    # build web dashboard
+npm run build        # API + web
+npm test             # Jest test suite
 ```
 
-## 📋 Commands
+## Repository Layout
 
-### Authentication
+```text
+src/
+  accounts/          Account pool, quota, health, token refresh helpers
+  auth/              Kiro OAuth, keychain storage, JWT validation
+  clients/           Anthropic, proxy, OAuth, Kiro API clients
+  config/            Runtime configuration schema and manager
+  infrastructure/    Redis, Qdrant, Anthropic infrastructure wrappers
+  mitm/              Optional MITM proxy implementation
+  optimizers/        Cache, context, request classification, thinking budget
+  parsers/           Anthropic request/response parsing and formatting
+  server/            Fastify routes and server bootstrap
+  streaming/         SSE streaming helpers
+  tracking/          Analytics and usage tracking
+web/                 Next.js dashboard
+docs/                Maintained documentation
+scripts/             Utility scripts
+```
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [API reference](docs/API.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Authentication](docs/AUTHENTICATION.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [CLI](docs/CLI.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [MITM proxy](docs/MITM_PROXY.md)
+- [Developer guide](docs/DEVELOPER.md)
+- [Migration guide](docs/MIGRATION.md)
+
+## Configuration
+
+Start from `.env.example`, then configure one or more account providers:
+
+- Direct Anthropic API keys.
+- Anthropic-compatible proxies that preserve native Anthropic format.
+- Kiro OAuth accounts managed by the CLI/device flow.
+
+Local config can also be stored in `config.json` or the path specified by `CONFIG_PATH`.
+
+## Security Notes
+
+- Do not commit `.env`, `config.json`, access tokens, refresh tokens, or API keys.
+- Kiro OAuth credentials are stored through the OS keychain when available, with encrypted file fallback.
+- MITM mode modifies local trust and host routing; use it only on machines you control.
+
+## Current Verification
+
+For the Kiro quota/token-refresh work, the current focused checks are:
+
 ```bash
-# Login with Builder ID (Device Code Flow)
-claudeflow login --method builder-id --region us-east-1
-
-# Login with SSO
-claudeflow login --method sso --sso-url https://your-sso.com
-
-# Login with manual token
-claudeflow login --method manual-token --token YOUR_TOKEN
+npm run build:api
+npx jest src/auth/__tests__/dual-auth-mode-handler.test.ts src/auth/__tests__/token-manager-refresh.test.ts src/accounts/__tests__/account-pool-manager.test.ts --runInBand
 ```
 
-### Account Management
-```bash
-# List accounts
-claudeflow account list
-
-# Refresh token
-claudeflow account refresh <account-id>
-
-# Test account
-claudeflow account test <account-id>
-
-# Remove account
-claudeflow account remove <account-id>
-
-# Set priority
-claudeflow account set-priority <account-id> <priority>
-```
-
-### MITM Proxy
-```bash
-# Install MITM proxy
-sudo claudeflow mitm install
-
-# Start MITM proxy
-sudo claudeflow mitm start
-
-# Check status
-claudeflow mitm status
-
-# Stop MITM proxy
-sudo claudeflow mitm stop
-
-# Uninstall MITM proxy
-sudo claudeflow mitm uninstall
-```
-
-### Daemon
-```bash
-# Start daemon
-claudeflow daemon start
-
-# Start daemon with MITM proxy
-sudo claudeflow daemon start --mitm
-
-# Stop daemon
-claudeflow daemon stop
-
-# Check status
-claudeflow daemon status
-
-# Restart daemon
-claudeflow daemon restart
-```
-
-### Monitoring
-```bash
-# View logs
-claudeflow logs
-
-# Check health
-claudeflow health
-
-# View quota
-claudeflow quota show
-
-# View analytics
-claudeflow analytics show
-```
-
-## 🏗️ Architecture
-
-```
-Kiro CLI/IDE → /etc/hosts redirect → MITM Proxy (443)
-                                         ↓
-                                  Account Pool Manager
-                                         ↓
-                              1000+ Kiro Accounts
-                                         ↓
-                                     Kiro API
-                                         ↓
-                              Native Anthropic Format
-```
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
-
-## 🔒 Security
-
-- ✅ OS Keychain storage (encrypted at rest)
-- ✅ TLS 1.2+ enforcement
-- ✅ Certificate validation
-- ✅ Token sanitization in logs
-- ✅ Audit logging (no sensitive data)
-- ✅ Region allowlist (SSRF prevention)
-
-## 🚦 Status
-
-- ✅ Authentication - COMPLETE
-- ✅ Token Refresh - COMPLETE
-- ✅ Account Pool - COMPLETE
-- ✅ MITM Proxy - COMPLETE
-- ✅ Smart Routing - COMPLETE
-- ✅ Health Monitoring - COMPLETE
-- ✅ Documentation - COMPLETE
-
-**Status:** ✅ PRODUCTION READY
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## 🙏 Acknowledgments
-
-- Inspired by [9router](https://github.com/decolua/9router)
-- Built with [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript)
-- Uses AWS SSO OIDC for authentication
-
-## 📞 Support
-
-- 📖 Documentation: See [docs/](docs/)
-- 🐛 Issues: [GitHub Issues](https://github.com/naufalworks/claudeflow/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/naufalworks/claudeflow/discussions)
-
-## 🎉 Why ClaudeFlow?
-
-**Before ClaudeFlow:**
-- ❌ Login every hour
-- ❌ Rate limited constantly
-- ❌ Single account
-- ❌ OpenAI format (40-60% features lost)
-
-**After ClaudeFlow:**
-- ✅ Never login again
-- ✅ Never rate limited
-- ✅ 1000+ accounts with smart routing
-- ✅ Native Anthropic format (100% features)
-
----
-
-**Built with ❤️ for the Claude community**
-
-> **Note:** This project is not affiliated with or endorsed by Anthropic.
+The full Jest suite currently includes unrelated failures in older CLI, analytics, health, and classifier tests. Stabilize those suites before tagging a release.

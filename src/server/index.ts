@@ -1,16 +1,28 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { Config } from '../config/index.js';
 import { InfrastructureClients, healthCheckAll } from '../infrastructure/index.js';
 import { TokenManager } from '../auth/TokenManager.js';
 import { KeychainStore } from '../auth/KeychainStore.js';
 import { DualAuthModeHandler } from '../auth/DualAuthModeHandler.js';
 import { ConfigurationManager } from '../config/manager.js';
+import { RealTimeUpdateService } from '../tracking/RealTimeUpdateService.js';
 
 export interface ServerContext {
   config: Config;
   infrastructure: InfrastructureClients;
   tokenManager?: TokenManager;
+}
+
+// Extend FastifyRequest to include user info
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: {
+      apiKey: string;
+      userId: string;
+    };
+  }
 }
 
 export async function createServer(context: ServerContext): Promise<FastifyInstance> {
@@ -34,11 +46,76 @@ export async function createServer(context: ServerContext): Promise<FastifyInsta
   // Register CORS
   await server.register(cors, {
     origin: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
+  });
+
+  // Register rate limiting
+  await server.register(rateLimit, {
+    max: 100, // 100 requests
+    timeWindow: '1 minute',
+    allowList: ['127.0.0.1', 'localhost'],
+    errorResponseBuilder: () => ({
+      error: {
+        type: 'rate_limit_error',
+        message: 'Too many requests, please try again later',
+      },
+    }),
   });
 
   // Add context to server
   server.decorate('context', context);
+
+  // Authentication middleware - skip for health/ready endpoints
+  server.addHook('onRequest', async (request, reply) => {
+    // Skip auth for health and ready endpoints
+    if (request.url === '/health' || request.url === '/ready') {
+      return;
+    }
+
+    // Get API key from Authorization header
+    const authHeader = request.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return reply.code(401).send({
+        error: {
+          type: 'authentication_error',
+          message: 'Missing or invalid Authorization header',
+        },
+      });
+    }
+
+    const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    // Validate API key against environment variable or config
+    const validApiKeys = process.env.CLAUDEFLOW_API_KEYS?.split(',') || [];
+
+    if (validApiKeys.length === 0) {
+      // If no API keys configured, allow all requests (development mode)
+      request.log.warn('No API keys configured - running in open mode');
+      request.user = {
+        apiKey,
+        userId: 'anonymous',
+      };
+      return;
+    }
+
+    if (!validApiKeys.includes(apiKey)) {
+      return reply.code(401).send({
+        error: {
+          type: 'authentication_error',
+          message: 'Invalid API key',
+        },
+      });
+    }
+
+    // Attach user info to request
+    request.user = {
+      apiKey,
+      userId: `user-${apiKey.substring(0, 8)}`, // Use first 8 chars as user ID
+    };
+  });
 
   // Request logging middleware
   server.addHook('onRequest', (request, _reply, done) => {
@@ -47,6 +124,7 @@ export async function createServer(context: ServerContext): Promise<FastifyInsta
         method: request.method,
         url: request.url,
         headers: request.headers,
+        userId: request.user?.userId,
       },
       'Incoming request'
     );
@@ -111,19 +189,42 @@ export async function createServer(context: ServerContext): Promise<FastifyInsta
   });
 
   // Import and register routes
-  const { handleMessagesRequest, handleModelsRequest, handleAnalyticsRequest, handleMetricsRequest } = await import('./routes.js');
-  
+  const {
+    handleMessagesRequest,
+    handleModelsRequest,
+    handleAnalyticsRequest,
+    handleMetricsRequest,
+    handleDashboardStartKiroLoginRequest,
+    handleDashboardPollKiroLoginRequest,
+    handleDashboardAccountsRequest,
+    handleDashboardAccountDetailRequest,
+    handleDashboardActivityRequest,
+    handleDashboardStatsRequest,
+    handleDashboardRefreshAccountRequest,
+    handleDashboardDeleteAccountRequest,
+  } = await import('./routes.js');
+
   // POST /v1/messages - Main request processing pipeline
   server.post('/v1/messages', handleMessagesRequest);
-  
+
   // GET /v1/models - List available models
   server.get('/v1/models', handleModelsRequest);
-  
+
   // GET /admin/analytics - Analytics and insights
   server.get('/admin/analytics', handleAnalyticsRequest);
-  
+
   // GET /metrics - Prometheus metrics
   server.get('/metrics', handleMetricsRequest);
+
+  // Dashboard API endpoints
+  server.post('/api/dashboard/accounts/kiro/start-login', handleDashboardStartKiroLoginRequest);
+  server.post('/api/dashboard/accounts/kiro/poll-login', handleDashboardPollKiroLoginRequest);
+  server.get('/api/dashboard/accounts', handleDashboardAccountsRequest);
+  server.get('/api/dashboard/accounts/:id', handleDashboardAccountDetailRequest);
+  server.get('/api/dashboard/activity', handleDashboardActivityRequest);
+  server.get('/api/dashboard/stats', handleDashboardStatsRequest);
+  server.post('/api/dashboard/accounts/:id/refresh', handleDashboardRefreshAccountRequest);
+  server.delete('/api/dashboard/accounts/:id', handleDashboardDeleteAccountRequest);
 
   return server;
 }
@@ -134,24 +235,36 @@ export async function startServer(server: FastifyInstance, config: Config): Prom
     const keychainStore = new KeychainStore();
     const dualAuthModeHandler = new DualAuthModeHandler();
     const configManager = new ConfigurationManager();
+    configManager.updateConfig(config);
     const tokenManager = new TokenManager(keychainStore, dualAuthModeHandler, configManager);
 
     // Start background token refresh worker
     tokenManager.startRefreshWorker();
     console.log('✅ Token refresh worker started (checks every 60 seconds)');
 
-    // Store tokenManager in server context for cleanup
+    // Initialize and start WebSocket server for real-time updates
+    const realtimeService = new RealTimeUpdateService({
+      port: Number(process.env.WS_PORT || 3130),
+    });
+
+    await realtimeService.start();
+    console.log(`✅ WebSocket server started on port ${Number(process.env.WS_PORT || 3130)}`);
+
+    // Store services in server context for cleanup
     (server as any).tokenManager = tokenManager;
+    (server as any).realtimeService = realtimeService;
 
     // Handle graceful shutdown
-    const cleanup = () => {
+    const cleanup = async () => {
       console.log('\n🛑 Shutting down server...');
       tokenManager.stopRefreshWorker();
       console.log('✅ Token refresh worker stopped');
+      await realtimeService.stop();
+      console.log('✅ WebSocket server stopped');
     };
 
-    process.on('SIGTERM', cleanup);
-    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', () => void cleanup());
+    process.on('SIGINT', () => void cleanup());
 
     await server.listen({
       port: config.server.port,

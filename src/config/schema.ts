@@ -109,7 +109,7 @@ export const ConfigSchema = z.object({
       apiKey: z.string().optional().default(''),
     }),
   }),
-  accounts: z.array(AccountSchema).min(1),
+  accounts: z.array(AccountSchema).default([]),
   routing: z.object({
     strategy: z.enum(['weighted-score', 'round-robin', 'sticky-round-robin']).default('weighted-score'),
     stickyLimit: z.number().int().positive().default(3), // requests per account before switching

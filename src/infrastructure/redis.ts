@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import RedisMock from 'ioredis-mock';
 
 export interface RedisConfig {
   url: string;
@@ -10,11 +11,9 @@ export class RedisClientWrapper {
 
   constructor(config: RedisConfig) {
     this.client = new Redis(config.url, {
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times: number) => (times > 1 ? null : 50),
       reconnectOnError: (err: Error) => {
         const targetError = 'READONLY';
         if (err.message.includes(targetError)) {
@@ -42,11 +41,15 @@ export class RedisClientWrapper {
 
   async connect(): Promise<void> {
     try {
+      await this.client.connect();
       await this.client.ping();
       this.connected = true;
     } catch (error) {
       this.connected = false;
-      throw error;
+      console.warn('⚠️ Redis unavailable; using in-memory Redis fallback for dashboard/dev mode.');
+      this.client = new (RedisMock as any)();
+      await this.client.ping();
+      this.connected = true;
     }
   }
 

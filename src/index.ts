@@ -11,22 +11,16 @@ async function main() {
     const configManager = new ConfigurationManager();
     const config = await configManager.loadConfig();
 
-    // Initialize infrastructure
-    // Find first Anthropic or Proxy account for infrastructure initialization
-    const firstAccount = config.accounts[0];
-    // Only accounts with apiKey (not kiro-oauth which uses keychain)
-    const accountWithApiKey = firstAccount.provider === 'kiro-oauth' 
-      ? config.accounts.find(a => a.provider !== 'kiro-oauth' && 'apiKey' in a)
-      : firstAccount;
-    
-    if (!accountWithApiKey || !('apiKey' in accountWithApiKey)) {
-      throw new Error('No account with apiKey found for infrastructure initialization. Add an Anthropic or Proxy account.');
-    }
-    
-    const anthropicConfig = {
-      apiKey: accountWithApiKey.apiKey,
-      baseURL: accountWithApiKey.provider === 'proxy' ? accountWithApiKey.baseURL : undefined,
-    };
+    // Initialize infrastructure. Kiro-only setups do not need an Anthropic API key.
+    const accountWithApiKey = config.accounts.find(a => a.provider !== 'kiro-oauth' && 'apiKey' in a);
+    const anthropicConfig = accountWithApiKey && 'apiKey' in accountWithApiKey
+      ? {
+          apiKey: accountWithApiKey.apiKey,
+          baseURL: accountWithApiKey.provider === 'proxy' ? accountWithApiKey.baseURL : undefined,
+        }
+      : {
+          apiKey: process.env.ANTHROPIC_API_KEY || 'not-configured',
+        };
     
     const infrastructure = await initializeInfrastructure({
       qdrant: config.infrastructure.qdrant,
@@ -38,10 +32,11 @@ async function main() {
     // Initialize CLI AuthService for session refresh worker
     let authService: AuthService | undefined;
     try {
-      const configManager = new ConfigurationManager();
-      const configPath = process.env.CLAUDEFLOW_CONFIG || `${process.env.HOME}/.claudeflow/config.json`;
+      const authConfigManager = new ConfigurationManager();
+      authConfigManager.updateConfig(config);
+      const configPath = process.env.CLAUDEFLOW_CONFIG || process.env.CONFIG_PATH || `${process.env.HOME}/.claudeflow/config.json`;
 
-      authService = new AuthService(configManager, infrastructure.redis, configPath);
+      authService = new AuthService(authConfigManager, infrastructure.redis, configPath);
       await authService.initialize();
 
       // Start session refresh worker

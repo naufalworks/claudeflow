@@ -18,13 +18,14 @@
  * - Exponential backoff with jitter (prevents timing attacks)
  *
  * Correctness properties:
- * - Property 6: needsRefresh returns true iff 0 < T - now < 5 minutes
+ * - Property 6: needsRefresh returns true when token is expired or within refresh buffer
  * - Property 7: Refresh updates stored credentials exactly (token rotation)
  * - Property 8: Failed refresh (401/403) marks account 're-auth-required'
  * - Property 9: Exponential backoff: delay(n) >= 2^n * base_delay, max 3 retries
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { createHash } from 'crypto';
 import { KeychainStore } from './KeychainStore.js';
 import { DualAuthModeHandler } from './DualAuthModeHandler.js';
 import { ConfigurationManager } from '../config/manager.js';
@@ -167,6 +168,10 @@ export class TokenManager {
         throw new AuthenticationError(accountId, 'No credentials found in keychain');
       }
 
+      if (!credentials.refreshToken) {
+        throw new AuthenticationError(accountId, 'No refresh token found in keychain');
+      }
+
       // Detect auth mode
       const modeConfig = this.dualAuthModeHandler.detectMode(credentials);
 
@@ -303,7 +308,7 @@ export class TokenManager {
   /**
    * Check if an account's token needs refresh
    *
-   * Property 6: returns true if and only if 0 < T - now < 5 minutes
+   * Property 6: returns true when token is expired or within refresh buffer
    *
    * @param accountId - Account identifier
    * @returns true if token expires within 5 minutes
@@ -324,8 +329,8 @@ export class TokenManager {
       // Calculate time until expiry
       const timeUntilExpiry = expiresAt.getTime() - now.getTime();
 
-      // Property 6: needsRefresh returns true iff 0 < T - now < 5 minutes
-      const needsRefresh = timeUntilExpiry > 0 && timeUntilExpiry < REFRESH_BUFFER_MS;
+      // Refresh expired tokens too; a valid refresh token can still recover them.
+      const needsRefresh = timeUntilExpiry < REFRESH_BUFFER_MS;
 
       if (needsRefresh) {
         logger.debug('Token needs refresh', {
@@ -381,6 +386,7 @@ export class TokenManager {
         logger.error('Background refresh worker error', { error: error.message });
       }
     }, WORKER_INTERVAL_MS);
+    this.workerIntervalId.unref?.();
 
     logger.info('Background refresh worker started', { intervalMs: WORKER_INTERVAL_MS });
   }
@@ -459,9 +465,57 @@ export class TokenManager {
     endpoint: string,
     requestBody: Record<string, string>
   ): Promise<any> {
-    const response = await this.httpClient.post(endpoint, requestBody, {
+    const endpointUrl = new URL(endpoint);
+    const isAwsOidcEndpoint =
+      endpointUrl.hostname.startsWith('oidc.') &&
+      endpointUrl.hostname.endsWith('.amazonaws.com') &&
+      endpointUrl.pathname === '/token';
+    const isKiroDesktopRefreshEndpoint =
+      endpointUrl.hostname.endsWith('.auth.desktop.kiro.dev') &&
+      endpointUrl.pathname === '/refreshToken';
+
+    if (isAwsOidcEndpoint) {
+      const response = await this.httpClient.post(
+        endpoint,
+        {
+          clientId: requestBody.client_id,
+          clientSecret: requestBody.client_secret,
+          refreshToken: requestBody.refresh_token,
+          grantType: 'refresh_token',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+        }
+      );
+
+      return response.data;
+    }
+
+    if (isKiroDesktopRefreshEndpoint) {
+      const response = await this.httpClient.post(
+        endpoint,
+        {
+          refreshToken: requestBody.refresh_token,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'User-Agent': 'kiro-cli/1.0.0',
+          },
+        }
+      );
+
+      return response.data;
+    }
+
+    const response = await this.httpClient.post(endpoint, new URLSearchParams(requestBody), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
       },
     });
 
@@ -477,19 +531,24 @@ export class TokenManager {
     data: any,
     existingCredentials: KeychainCredentials
   ): KeychainCredentials {
-    // Validate response structure
-    if (!data.access_token || !data.refresh_token) {
+    const accessToken = data.access_token || data.accessToken;
+    const refreshToken = data.refresh_token || data.refreshToken || existingCredentials.refreshToken;
+
+    // Validate response structure. AWS OIDC returns camelCase; Kiro desktop/social
+    // may return snake_case.
+    if (!accessToken || !refreshToken) {
       throw new Error('Invalid token response: missing required fields');
     }
 
     // Calculate expiry time
-    const expiresIn = data.expires_in || 3600; // Default 1 hour
+    const expiresIn = data.expires_in || data.expiresIn || 3600; // Default 1 hour
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
     return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
+      accessToken,
+      refreshToken,
       expiresAt,
+      scopes: existingCredentials.scopes,
       // Preserve client credentials from existing credentials (for AWS SSO mode)
       clientId: existingCredentials.clientId,
       clientSecret: existingCredentials.clientSecret,
@@ -536,7 +595,10 @@ export class TokenManager {
    */
   private async getAccountRegion(accountId: string): Promise<string> {
     const config = this.configManager.getConfig();
-    const account = config.accounts.find(a => a.id === accountId);
+    const account = config.accounts.find((a: any) =>
+      a.id === accountId ||
+      (a.provider === 'kiro-oauth' && a.profileArn && `kiro-${createHash('sha256').update(a.profileArn).digest('hex').substring(0, 16)}` === accountId)
+    );
 
     if (!account) {
       throw new Error(`Account ${accountId} not found in config`);

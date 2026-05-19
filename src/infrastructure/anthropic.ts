@@ -23,6 +23,10 @@ export class AnthropicClientWrapper {
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this.apiKey || this.apiKey === 'not-configured') {
+      return true;
+    }
+
     try {
       // Test with a minimal request
       await this.client.messages.create({

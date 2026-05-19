@@ -18,6 +18,7 @@ import * as os from 'os';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
+
 import type { KeychainCredentials } from '../types/kiro-oauth.types.js';
 
 /**
@@ -25,11 +26,21 @@ import type { KeychainCredentials } from '../types/kiro-oauth.types.js';
  * Keytar requires native compilation (node-gyp) and may not be available
  * on all systems. The encrypted file fallback is always available.
  */
-let keytar: typeof import('keytar') | null = null;
-try {
-  keytar = await import('keytar');
-} catch {
-  // keytar not available — encrypted file fallback will be used
+let keytar: typeof import('keytar') | null | undefined;
+
+async function getKeytar(): Promise<typeof import('keytar') | null> {
+  if (keytar !== undefined) {
+    return keytar;
+  }
+
+  try {
+    keytar = await import('keytar');
+  } catch {
+    // keytar not available or native binding incompatible — encrypted file fallback will be used
+    keytar = null;
+  }
+
+  return keytar;
 }
 
 /**
@@ -56,7 +67,7 @@ interface EncryptedData {
  */
 const KeychainCredentialsSchema = z.object({
   accessToken: z.string().min(1),
-  refreshToken: z.string().min(1),
+  refreshToken: z.string(),
   expiresAt: z.string().datetime(),
   scopes: z.array(z.string()).optional(),
   clientId: z.string().optional(),
@@ -84,8 +95,10 @@ export class KeychainStore {
     // Validate credentials before storing
     KeychainCredentialsSchema.parse(credentials);
 
+    const keychain = await getKeytar();
+
     // Try keychain first (if available)
-    if (keytar) {
+    if (keychain) {
       try {
         await this.storeInKeychain(accountId, credentials);
         return;
@@ -106,8 +119,10 @@ export class KeychainStore {
    * Tries OS keychain first, falls back to encrypted file
    */
   async retrieve(accountId: string): Promise<KeychainCredentials | null> {
+    const keychain = await getKeytar();
+
     // Try keychain first (if available)
-    if (keytar) {
+    if (keychain) {
       try {
         const credentials = await this.retrieveFromKeychain(accountId);
         if (credentials) {
@@ -134,8 +149,9 @@ export class KeychainStore {
 
     // Try to delete from keychain
     try {
-      if (keytar) {
-        await keytar.deletePassword(this.SERVICE_NAME, accountId);
+      const keychain = await getKeytar();
+      if (keychain) {
+        await keychain.deletePassword(this.SERVICE_NAME, accountId);
       }
     } catch (error: any) {
       errors.push(error);
@@ -165,8 +181,9 @@ export class KeychainStore {
   async exists(accountId: string): Promise<boolean> {
     try {
       // Check keychain
-      if (keytar) {
-        const password = await keytar.getPassword(this.SERVICE_NAME, accountId);
+      const keychain = await getKeytar();
+      if (keychain) {
+        const password = await keychain.getPassword(this.SERVICE_NAME, accountId);
         if (password) {
           return true;
         }
@@ -210,11 +227,12 @@ export class KeychainStore {
     accountId: string,
     credentials: KeychainCredentials
   ): Promise<void> {
-    if (!keytar) {
+    const keychain = await getKeytar();
+    if (!keychain) {
       throw new Error('Keytar module not available');
     }
     const password = JSON.stringify(credentials);
-    await keytar.setPassword(this.SERVICE_NAME, accountId, password);
+    await keychain.setPassword(this.SERVICE_NAME, accountId, password);
   }
 
   /**
@@ -223,10 +241,11 @@ export class KeychainStore {
   private async retrieveFromKeychain(
     accountId: string
   ): Promise<KeychainCredentials | null> {
-    if (!keytar) {
+    const keychain = await getKeytar();
+    if (!keychain) {
       return null;
     }
-    const password = await keytar.getPassword(this.SERVICE_NAME, accountId);
+    const password = await keychain.getPassword(this.SERVICE_NAME, accountId);
 
     if (!password) {
       return null;

@@ -29,7 +29,7 @@
  * Requirements: 5.1-5.10
  */
 
-import * as jose from 'jose';
+import type { JSONWebKeySet } from 'jose';
 import axios, { AxiosInstance } from 'axios';
 import * as https from 'https';
 import { logger } from '../cli/utils/logger.js';
@@ -63,7 +63,7 @@ const MAX_RETRY_ATTEMPTS = 1;
  */
 interface CachedKeySet {
   /** JSON Web Key Set from OIDC provider */
-  keys: jose.JSONWebKeySet;
+  keys: JSONWebKeySet;
   /** Timestamp when keys were fetched */
   fetchedAt: Date;
   /** Timestamp of last access (for LRU eviction) */
@@ -82,7 +82,7 @@ export class JWTValidator {
   private readonly publicKeyCache: Map<string, CachedKeySet>;
 
   /** In-flight request promises for deduplication */
-  private readonly inflightRequests: Map<string, Promise<jose.JSONWebKeySet>>;
+  private readonly inflightRequests: Map<string, Promise<JSONWebKeySet>>;
 
   /** HTTP client for OIDC discovery requests */
   private readonly httpClient: AxiosInstance;
@@ -113,7 +113,7 @@ export class JWTValidator {
    * @param forceRefresh - Force refresh even if cache is valid (default: false)
    * @returns JSON Web Key Set from OIDC provider
    */
-  async fetchPublicKeys(discoveryUrl: string, forceRefresh = false): Promise<jose.JSONWebKeySet> {
+  async fetchPublicKeys(discoveryUrl: string, forceRefresh = false): Promise<JSONWebKeySet> {
     // Check cache if not forcing refresh
     if (!forceRefresh) {
       const cached = this.publicKeyCache.get(discoveryUrl);
@@ -186,6 +186,7 @@ export class JWTValidator {
         try {
           // Fetch public keys
           const keys = await this.fetchPublicKeys(discoveryUrl, retryCount > 0);
+          const jose = await import('jose');
 
           // Create JWKS for verification
           const JWKS = jose.createLocalJWKSet(keys);
@@ -262,8 +263,18 @@ export class JWTValidator {
    */
   decode(token: string): JWTClaims {
     try {
-      const claims = jose.decodeJwt(token);
-      return claims as JWTClaims;
+      const [, payload] = token.split('.');
+      if (!payload) {
+        throw new Error('Missing payload');
+      }
+
+      const paddedPayload = payload.padEnd(payload.length + (4 - (payload.length % 4)) % 4, '=');
+      const decoded = Buffer.from(
+        paddedPayload.replace(/-/g, '+').replace(/_/g, '/'),
+        'base64'
+      ).toString('utf8');
+
+      return JSON.parse(decoded) as JWTClaims;
     } catch (error: any) {
       logger.error('Failed to decode JWT', { error: error.message });
       throw new Error('Invalid JWT format');
@@ -329,11 +340,11 @@ export class JWTValidator {
   /**
    * Fetch public keys from network
    */
-  private async fetchPublicKeysFromNetwork(discoveryUrl: string): Promise<jose.JSONWebKeySet> {
+  private async fetchPublicKeysFromNetwork(discoveryUrl: string): Promise<JSONWebKeySet> {
     logger.info('Fetching public keys from OIDC discovery endpoint', { discoveryUrl });
 
     try {
-      const response = await this.httpClient.get<jose.JSONWebKeySet>(discoveryUrl);
+      const response = await this.httpClient.get<JSONWebKeySet>(discoveryUrl);
 
       if (!response.data || !response.data.keys) {
         throw new Error('Invalid OIDC discovery response: missing keys');

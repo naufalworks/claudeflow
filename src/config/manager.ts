@@ -134,8 +134,9 @@ export class ConfigurationManager {
     }
 
     if (accounts.length > 0) {
-      // Append environment accounts to existing accounts instead of replacing
-      envConfig.accounts = [...envConfig.accounts, ...accounts];
+      const existingIds = new Set(envConfig.accounts.map((account) => account.id));
+      const envOnlyAccounts = accounts.filter((account) => !existingIds.has(account.id));
+      envConfig.accounts = [...envConfig.accounts, ...envOnlyAccounts];
     }
 
     return envConfig;

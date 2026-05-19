@@ -223,6 +223,7 @@ export class AuthService {
     this.refreshWorkerInterval = setInterval(async () => {
       await this.checkAndRefreshSessions();
     }, this.REFRESH_CHECK_INTERVAL_MS);
+    this.refreshWorkerInterval.unref?.();
 
     logger.info('Session refresh worker started');
   }

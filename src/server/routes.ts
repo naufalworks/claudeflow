@@ -26,6 +26,11 @@ import { AccountPoolManager } from '../accounts/account-pool-manager.js';
 import { KiroMitmClient, KiroMitmError } from '../accounts/kiro-mitm-client.js';
 import { KiroAuthManager } from '../accounts/kiro-auth-manager.js';
 import { StreamingHandler } from '../streaming/streaming-handler.js';
+import { ConfigurationManager } from '../config/manager.js';
+import { KeychainStore } from '../auth/KeychainStore.js';
+import { DeviceCodeClient } from '../auth/DeviceCodeClient.js';
+import { extractProfileArnFromToken, storeKiroOAuthAccount } from '../auth/kiro-account-store.js';
+import { createHash, randomUUID } from 'crypto';
 import type { AnthropicRequest, AnthropicResponse, ServerSentEvent } from '../types/anthropic.types.js';
 import type { ServerContext } from './index.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -50,11 +55,45 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   backoffMultiplier: 2,
 };
 
+type KiroLoginSession = {
+  clientId: string;
+  clientSecret: string;
+  deviceCode: string;
+  region: string;
+  startUrl: string;
+  expiresAt: number;
+  interval: number;
+};
+
+const kiroLoginSessions = new Map<string, KiroLoginSession>();
+
+function getConfigPath(): string {
+  return process.env.CLAUDEFLOW_CONFIG || process.env.CONFIG_PATH || `${process.env.HOME}/.claudeflow/config.json`;
+}
+
 /**
  * Sleep for specified milliseconds
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAccountQuotaExceeded(account: any): boolean {
+  if (account.quota.tokensPerDayUsed >= account.quota.tokensPerDay) {
+    return true;
+  }
+
+  const creditQuota = account.kiroCreditQuota;
+  if (
+    account.provider === 'kiro-oauth' &&
+    creditQuota &&
+    (!creditQuota.resetTime || creditQuota.resetTime > Date.now()) &&
+    creditQuota.remaining <= 0
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -231,12 +270,20 @@ export async function handleMessagesRequest(
     
     // 8. Route to appropriate endpoint based on account type
     let response: AnthropicResponse;
-    
+
     // Retry logic with exponential backoff
     let lastError: any;
     for (let attempt = 0; attempt <= DEFAULT_RETRY_CONFIG.maxRetries; attempt++) {
       try {
-        if (accountSelection.account.provider === 'kiro') {
+        if (accountSelection.account.provider === 'kiro-oauth') {
+          request.log.info(
+            { requestId, accountId: accountSelection.account.id, attempt },
+            'Routing to Kiro OAuth direct API'
+          );
+          response = await accountPoolManager.routeRequest(accountSelection.account, optimizedRequest);
+          request.log.info({ requestId }, 'Received response from Kiro OAuth direct API');
+          break;
+        } else if (accountSelection.account.provider === 'kiro') {
           // Route to Kiro MITM router
           request.log.info(
             { requestId, accountId: accountSelection.account.id, attempt },
@@ -1106,6 +1153,683 @@ export async function handleMetricsRequest(
       error: {
         type: 'api_error',
         message: 'Failed to generate metrics',
+      },
+    });
+  }
+}
+
+/**
+ * POST /api/dashboard/accounts/kiro/start-login handler
+ */
+export async function handleDashboardStartKiroLoginRequest(
+  request: FastifyRequest<{ Body: { region?: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const region = request.body?.region || 'us-east-1';
+    const startUrl = 'https://view.awsapps.com/start';
+    const deviceCodeClient = new DeviceCodeClient();
+    const registration = await deviceCodeClient.registerClient(region);
+    const deviceAuth = await deviceCodeClient.startDeviceAuthorization(
+      registration.clientId,
+      registration.clientSecret,
+      startUrl,
+      region
+    );
+    const sessionId = randomUUID();
+    const expiresAt = Date.now() + deviceAuth.expiresIn * 1000;
+
+    kiroLoginSessions.set(sessionId, {
+      clientId: registration.clientId,
+      clientSecret: registration.clientSecret,
+      deviceCode: deviceAuth.deviceCode,
+      region,
+      startUrl,
+      expiresAt,
+      interval: deviceAuth.interval,
+    });
+
+    return reply.code(200).send({
+      sessionId,
+      verificationUri: deviceAuth.verificationUri,
+      verificationUriComplete: deviceAuth.verificationUriComplete,
+      userCode: deviceAuth.userCode,
+      expiresIn: deviceAuth.expiresIn,
+      interval: deviceAuth.interval,
+    });
+  } catch (error: any) {
+    request.log.error({ requestId: request.id, error: error.message, stack: error.stack }, 'Failed to start Kiro login');
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: error.message || 'Failed to start Kiro login',
+      },
+    });
+  }
+}
+
+/**
+ * POST /api/dashboard/accounts/kiro/poll-login handler
+ */
+export async function handleDashboardPollKiroLoginRequest(
+  request: FastifyRequest<{ Body: { sessionId: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const sessionId = request.body?.sessionId;
+    if (!sessionId) {
+      return reply.code(400).send({ error: { type: 'invalid_request_error', message: 'sessionId is required' } });
+    }
+
+    const session = kiroLoginSessions.get(sessionId);
+    if (!session) {
+      return reply.code(404).send({ error: { type: 'not_found_error', message: 'Login session not found or expired' } });
+    }
+
+    if (Date.now() > session.expiresAt) {
+      kiroLoginSessions.delete(sessionId);
+      return reply.code(410).send({ error: { type: 'expired_token', message: 'Login session expired. Start again.' } });
+    }
+
+    const deviceCodeClient = new DeviceCodeClient();
+    const tokens = await deviceCodeClient.pollForToken(
+      session.clientId,
+      session.clientSecret,
+      session.deviceCode,
+      session.region
+    );
+
+    if (!tokens) {
+      return reply.code(200).send({ status: 'pending' });
+    }
+
+    const context = (request.server as any).context as ServerContext;
+    const configManager = new ConfigurationManager();
+    const keychainStore = new KeychainStore();
+    const profileArn = await extractProfileArnFromToken(tokens.accessToken);
+    const account = await storeKiroOAuthAccount({
+      configManager,
+      keychainStore,
+      configPath: getConfigPath(),
+      region: session.region,
+      profileArn,
+      tokens,
+      clientId: session.clientId,
+      clientSecret: session.clientSecret,
+    });
+
+    const persistedConfig = configManager.getConfig();
+    context.config.accounts = persistedConfig.accounts;
+    kiroLoginSessions.delete(sessionId);
+
+    return reply.code(200).send({ status: 'complete', account });
+  } catch (error: any) {
+    request.log.error({ requestId: request.id, error: error.message, stack: error.stack }, 'Failed to poll Kiro login');
+    const message = error.message || 'Failed to poll Kiro login';
+    const isDenied = /denied/i.test(message);
+    const isExpired = /expired/i.test(message);
+    return reply.code(isDenied ? 403 : isExpired ? 410 : 500).send({
+      error: {
+        type: isDenied ? 'access_denied' : isExpired ? 'expired_token' : 'api_error',
+        message,
+      },
+    });
+  }
+}
+
+/**
+ * GET /api/dashboard/accounts handler
+ *
+ * Returns list of all accounts with status, quota, and performance metrics
+ */
+export async function handleDashboardAccountsRequest(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    request.log.info({ requestId }, 'Fetching dashboard accounts');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { config, infrastructure } = context;
+
+    // Import AccountPoolManager
+    const { AccountPoolManager } = await import('../accounts/account-pool-manager.js');
+    const accountPoolManager = new AccountPoolManager(
+      infrastructure.redis,
+      config,
+      infrastructure.keychain
+    );
+
+    await accountPoolManager.loadKiroCreditQuotaFromRedis();
+    await accountPoolManager.refreshStaleKiroCreditQuotas();
+
+    // Get all accounts from pool
+    const accounts = accountPoolManager.getAccounts();
+
+    // Format accounts for dashboard
+    const formattedAccounts = accounts.map((account: any) => ({
+      id: account.id,
+      provider: account.provider,
+      status: isAccountQuotaExceeded(account) ? 'quota_exceeded' : 'active',
+      quota: {
+        requestsPerMinute: account.quota.requestsPerMinute,
+        requestsPerMinuteUsed: account.quota.requestsPerMinuteUsed,
+        tokensPerDay: account.quota.tokensPerDay,
+        tokensPerDayUsed: account.quota.tokensPerDayUsed,
+        resetTime: account.quota.resetTime,
+      },
+      kiroCreditQuota: account.kiroCreditQuota,
+      performance: {
+        averageLatency: account.performance.averageLatency,
+        successRate: account.performance.successRate,
+        lastUsed: account.performance.lastUsed,
+      },
+      costEfficiency: account.costEfficiency,
+      requestCount: account.requestCount || 0,
+    }));
+
+    request.log.info(
+      {
+        requestId,
+        accountCount: formattedAccounts.length,
+      },
+      'Dashboard accounts retrieved'
+    );
+
+    return reply.code(200).send({
+      accounts: formattedAccounts,
+      total: formattedAccounts.length,
+    });
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to fetch dashboard accounts'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: 'Failed to fetch accounts',
+      },
+    });
+  }
+}
+
+/**
+ * GET /api/dashboard/accounts/:id handler
+ *
+ * Returns detailed information for a single account
+ */
+export async function handleDashboardAccountDetailRequest(
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    const accountId = request.params.id;
+    request.log.info({ requestId, accountId }, 'Fetching account details');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { config, infrastructure } = context;
+
+    // Import AccountPoolManager
+    const { AccountPoolManager } = await import('../accounts/account-pool-manager.js');
+    const accountPoolManager = new AccountPoolManager(
+      infrastructure.redis,
+      config,
+      infrastructure.keychain
+    );
+
+    // Get account by ID
+    const account = accountPoolManager.getAccount(accountId);
+
+    if (!account) {
+      return reply.code(404).send({
+        error: {
+          type: 'not_found_error',
+          message: 'Account not found',
+        },
+      });
+    }
+
+    await accountPoolManager.loadKiroCreditQuotaFromRedis();
+    if (account.provider === 'kiro-oauth' && (!account.kiroCreditQuota || Date.now() - account.kiroCreditQuota.updatedAt > 15 * 60 * 1000)) {
+      try {
+        await accountPoolManager.refreshKiroCreditQuota(accountId);
+      } catch (quotaError: any) {
+        request.log.warn(
+          { requestId, accountId, error: quotaError.message },
+          'Failed to refresh Kiro quota while fetching account details'
+        );
+      }
+    }
+
+    // Get additional details from Redis
+    const redisClient = infrastructure.redis.getClient();
+    const accountKey = `account:${accountId}`;
+
+    // Get recent request history (last 100)
+    const recentRequests = await redisClient.lrange(`${accountKey}:requests`, 0, 99);
+
+    // Format account details
+    const accountDetails = {
+      id: account.id,
+      provider: account.provider,
+      status: isAccountQuotaExceeded(account) ? 'quota_exceeded' : 'active',
+      quota: {
+        requestsPerMinute: account.quota.requestsPerMinute,
+        requestsPerMinuteUsed: account.quota.requestsPerMinuteUsed,
+        tokensPerDay: account.quota.tokensPerDay,
+        tokensPerDayUsed: account.quota.tokensPerDayUsed,
+        resetTime: account.quota.resetTime,
+      },
+      kiroCreditQuota: account.kiroCreditQuota,
+      performance: {
+        averageLatency: account.performance.averageLatency,
+        successRate: account.performance.successRate,
+        lastUsed: account.performance.lastUsed,
+      },
+      costEfficiency: account.costEfficiency,
+      requestCount: account.requestCount || 0,
+      recentRequests: recentRequests.map((req) => JSON.parse(req)),
+    };
+
+    request.log.info({ requestId, accountId }, 'Account details retrieved');
+
+    return reply.code(200).send(accountDetails);
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to fetch account details'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: 'Failed to fetch account details',
+      },
+    });
+  }
+}
+
+/**
+ * GET /api/dashboard/activity handler
+ *
+ * Returns recent activity events (last 100)
+ */
+export async function handleDashboardActivityRequest(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    request.log.info({ requestId }, 'Fetching dashboard activity');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { infrastructure } = context;
+
+    // Get recent activity from Redis
+    const redisClient = infrastructure.redis.getClient();
+    const activityEvents = await redisClient.lrange('activity:events', 0, 99);
+
+    // Parse and format events
+    const formattedEvents = activityEvents.map((event) => JSON.parse(event));
+
+    request.log.info(
+      {
+        requestId,
+        eventCount: formattedEvents.length,
+      },
+      'Dashboard activity retrieved'
+    );
+
+    return reply.code(200).send({
+      events: formattedEvents,
+      total: formattedEvents.length,
+    });
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to fetch dashboard activity'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: 'Failed to fetch activity',
+      },
+    });
+  }
+}
+
+/**
+ * GET /api/dashboard/stats handler
+ *
+ * Returns dashboard summary statistics
+ */
+export async function handleDashboardStatsRequest(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    request.log.info({ requestId }, 'Fetching dashboard stats');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { config, infrastructure } = context;
+
+    // Import AccountPoolManager and AnalyticsEngine
+    const { AccountPoolManager } = await import('../accounts/account-pool-manager.js');
+    const { AnalyticsEngine } = await import('../analytics/analytics-engine.js');
+
+    const accountPoolManager = new AccountPoolManager(
+      infrastructure.redis,
+      config,
+      infrastructure.keychain
+    );
+    const analyticsEngine = new AnalyticsEngine(infrastructure.redis.getClient());
+
+    // Get all accounts
+    const accounts = accountPoolManager.getAccounts();
+
+    // Calculate account status counts
+    const activeAccounts = accounts.filter((acc: any) => !isAccountQuotaExceeded(acc)).length;
+    const expiringAccounts = accounts.filter((acc: any) => {
+      if (acc.provider === 'kiro-oauth') {
+        const expiresAt = new Date((acc as any).expiresAt);
+        const now = new Date();
+        const hoursUntilExpiry = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60);
+        return hoursUntilExpiry > 0 && hoursUntilExpiry < 24;
+      }
+      return false;
+    }).length;
+    const expiredAccounts = accounts.filter((acc: any) => {
+      if (acc.provider === 'kiro-oauth') {
+        const expiresAt = new Date((acc as any).expiresAt);
+        return expiresAt < new Date();
+      }
+      return false;
+    }).length;
+
+    // Get metrics for last 24 hours
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
+    const metrics = await analyticsEngine.getMetrics({ startTime, endTime });
+
+    // Build stats response
+    const stats = {
+      accounts: {
+        total: accounts.length,
+        active: activeAccounts,
+        expiring: expiringAccounts,
+        expired: expiredAccounts,
+      },
+      requests: {
+        total: metrics.totalRequests,
+        successful: metrics.successfulRequests,
+        failed: metrics.failedRequests,
+        successRate: metrics.totalRequests > 0 ? metrics.successfulRequests / metrics.totalRequests : 0,
+      },
+      tokens: {
+        input: metrics.totalInputTokens,
+        output: metrics.totalOutputTokens,
+        cacheCreation: metrics.totalCacheCreationTokens,
+        cacheRead: metrics.totalCacheReadTokens,
+        thinking: metrics.totalThinkingTokens,
+        total: metrics.totalInputTokens + metrics.totalOutputTokens,
+      },
+      performance: {
+        averageLatency: metrics.averageResponseTime,
+        p50Latency: metrics.p50ResponseTime,
+        p95Latency: metrics.p95ResponseTime,
+        p99Latency: metrics.p99ResponseTime,
+      },
+      optimization: {
+        cacheHitRate: metrics.cacheHitRate,
+        deduplicationRate: metrics.deduplicationRate,
+        costSavings: metrics.costSavings,
+        totalCost: metrics.totalCost,
+      },
+      providers: {
+        kiroRequests: metrics.kiroRequests,
+        anthropicRequests: metrics.anthropicRequests,
+        kiroPercentage: metrics.kiroPercentage,
+      },
+      lastUpdated: new Date().toISOString(),
+    };
+
+    request.log.info({ requestId }, 'Dashboard stats retrieved');
+
+    return reply.code(200).send(stats);
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to fetch dashboard stats'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: 'Failed to fetch stats',
+      },
+    });
+  }
+}
+
+/**
+ * POST /api/dashboard/accounts/:id/refresh handler
+ *
+ * Manually refresh account token (for Kiro OAuth accounts)
+ */
+export async function handleDashboardRefreshAccountRequest(
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    const accountId = request.params.id;
+    request.log.info({ requestId, accountId }, 'Refreshing account token');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { config, infrastructure } = context;
+
+    // Import AccountPoolManager
+    const { AccountPoolManager } = await import('../accounts/account-pool-manager.js');
+    const accountPoolManager = new AccountPoolManager(
+      infrastructure.redis,
+      config,
+      infrastructure.keychain
+    );
+
+    // Get account by ID
+    const account = accountPoolManager.getAccount(accountId);
+
+    if (!account) {
+      return reply.code(404).send({
+        error: {
+          type: 'not_found_error',
+          message: 'Account not found',
+        },
+      });
+    }
+
+    // Non-Kiro accounts have no token/quota refresh. Return current account instead of failing.
+    if (account.provider !== 'kiro-oauth') {
+      return reply.code(200).send({
+        success: true,
+        skipped: true,
+        account: {
+          id: account.id,
+          provider: account.provider,
+        },
+      });
+    }
+
+    // Refresh live CodeWhisperer credits. Do not force token rotation here:
+    // Kiro/AWS refresh tokens can reject unnecessary refreshes with 400, while
+    // AccountPoolManager will refresh only when the access token is near expiry.
+    await accountPoolManager.refreshKiroCreditQuota(accountId);
+
+    // Get updated account
+    const updatedAccount = accountPoolManager.getAccount(accountId);
+
+    request.log.info({ requestId, accountId }, 'Account quota refreshed successfully');
+
+    return reply.code(200).send({
+      success: true,
+      account: {
+        id: updatedAccount!.id,
+        provider: updatedAccount!.provider,
+        expiresAt: (updatedAccount as any).expiresAt,
+        kiroCreditQuota: updatedAccount!.kiroCreditQuota,
+      },
+    });
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to refresh account token'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: error.message || 'Failed to refresh token',
+      },
+    });
+  }
+}
+
+/**
+ * DELETE /api/dashboard/accounts/:id handler
+ *
+ * Deletes an account from the pool
+ */
+export async function handleDashboardDeleteAccountRequest(
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const requestId = request.id;
+    const accountId = request.params.id;
+    request.log.info({ requestId, accountId }, 'Deleting account');
+
+    // Get server context
+    const context = (request.server as any).context as ServerContext;
+    const { config, infrastructure } = context;
+
+    // Import AccountPoolManager
+    const { AccountPoolManager } = await import('../accounts/account-pool-manager.js');
+    const accountPoolManager = new AccountPoolManager(
+      infrastructure.redis,
+      config,
+      infrastructure.keychain
+    );
+
+    // Get account by ID to verify it exists
+    const account = accountPoolManager.getAccount(accountId);
+
+    if (!account) {
+      return reply.code(404).send({
+        error: {
+          type: 'not_found_error',
+          message: 'Account not found',
+        },
+      });
+    }
+
+    const configPath = getConfigPath();
+    const configManager = new ConfigurationManager();
+    await configManager.loadConfig(configPath);
+    const persistedConfig = configManager.getConfig();
+
+    const originalAccountCount = persistedConfig.accounts.length;
+    persistedConfig.accounts = persistedConfig.accounts.filter((configuredAccount: any) => {
+      if (configuredAccount.id === accountId) {
+        return false;
+      }
+
+      if (configuredAccount.provider === 'kiro-oauth' && configuredAccount.profileArn) {
+        const generatedId = `kiro-${createHash('sha256')
+          .update(configuredAccount.profileArn)
+          .digest('hex')
+          .substring(0, 16)}`;
+        return generatedId !== accountId;
+      }
+
+      return true;
+    });
+
+    if (persistedConfig.accounts.length === originalAccountCount) {
+      return reply.code(404).send({
+        error: {
+          type: 'not_found_error',
+          message: 'Account not found in configuration',
+        },
+      });
+    }
+
+    await configManager.saveConfig(persistedConfig);
+    context.config.accounts = persistedConfig.accounts;
+
+    try {
+      const keychainStore = new KeychainStore();
+      await keychainStore.delete(accountId);
+    } catch (keychainError: any) {
+      request.log.warn(
+        { requestId, accountId, error: keychainError.message },
+        'Account config deleted but credentials could not be removed from keychain'
+      );
+    }
+
+    accountPoolManager.removeAccount(accountId);
+
+    request.log.info({ requestId, accountId }, 'Account deleted successfully');
+
+    return reply.code(200).send({
+      success: true,
+      message: 'Account deleted successfully',
+    });
+  } catch (error: any) {
+    request.log.error(
+      {
+        requestId: request.id,
+        accountId: request.params.id,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Failed to delete account'
+    );
+
+    return reply.code(500).send({
+      error: {
+        type: 'api_error',
+        message: error.message || 'Failed to delete account',
       },
     });
   }

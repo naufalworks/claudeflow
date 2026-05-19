@@ -246,6 +246,11 @@ export class KiroOAuthAuthStrategy implements AuthStrategy {
         accountId: kiroAccount.id,
       });
 
+      // TokenManager requires config-backed account metadata (region/profileArn).
+      // This strategy may be constructed outside server bootstrap, so seed its
+      // private ConfigurationManager with the runtime account before refresh.
+      this.seedTokenManagerConfig(kiroAccount);
+
       // Delegate to TokenManager
       const result = await this.tokenManager.refresh(kiroAccount.id);
 
@@ -304,10 +309,58 @@ export class KiroOAuthAuthStrategy implements AuthStrategy {
   }
 
   /**
+   * Seed the TokenManager's ConfigurationManager with the runtime account.
+   *
+   * KiroOAuthAuthStrategy is instantiated without server context, so its
+   * TokenManager otherwise has an empty config and refresh fails with
+   * "Account <id> not found in config" for dashboard/runtime Kiro accounts.
+   */
+  private seedTokenManagerConfig(account: KiroOAuthAccount): void {
+    const tokenManagerWithConfig = this.tokenManager as unknown as {
+      configManager?: ConfigurationManager;
+    };
+
+    tokenManagerWithConfig.configManager?.updateConfig({
+      accounts: [account],
+      infrastructure: {
+        qdrant: { url: process.env.QDRANT_URL || 'http://localhost:6333' },
+        redis: { url: process.env.REDIS_URL || 'redis://localhost:6379' },
+        voyage: { apiKey: process.env.VOYAGE_API_KEY || 'not-configured' },
+      },
+      routing: {
+        strategy: 'weighted-score',
+        stickyLimit: 3,
+      },
+      optimization: {
+        semanticDeduplication: {
+          enabled: false,
+          similarityThreshold: 0.95,
+          cacheTTL: 86400,
+        },
+        promptCaching: {
+          enabled: true,
+          minTokens: 1024,
+        },
+        thinkingBudget: {
+          enabled: true,
+          simple: 0,
+          moderate: 2000,
+          complex: 10000,
+        },
+        contextCompression: {
+          enabled: true,
+          minTokens: 8000,
+          recentMessagesToKeep: 3,
+        },
+      },
+    });
+  }
+
+  /**
    * Check if OAuth session needs refresh
-   * 
+   *
    * Delegates to TokenManager which includes 5-minute buffer.
-   * 
+   *
    * @param account - Account to check
    * @returns True if session needs refresh
    */

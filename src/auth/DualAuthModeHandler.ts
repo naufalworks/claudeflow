@@ -2,7 +2,7 @@
  * Dual Authentication Mode Handler
  *
  * Handles two authentication modes for Kiro:
- * 1. Kiro Desktop mode - Public client with PKCE (no client secret)
+ * 1. Kiro Desktop/social mode - Kiro auth service refresh token
  * 2. AWS SSO mode - Confidential client with client credentials
  *
  * Auto-detects mode based on stored credentials and provides
@@ -23,7 +23,7 @@ export class DualAuthModeHandler {
   private static readonly DEFAULT_REGION = 'us-east-1';
 
   // Token endpoint templates
-  private static readonly KIRO_DESKTOP_TOKEN_ENDPOINT = 'https://prod.{region}.auth.desktop.kiro.dev/token';
+  private static readonly KIRO_DESKTOP_REFRESH_ENDPOINT = 'https://prod.{region}.auth.desktop.kiro.dev/refreshToken';
   private static readonly AWS_SSO_TOKEN_ENDPOINT = 'https://oidc.{region}.amazonaws.com/token';
 
   /**
@@ -72,8 +72,8 @@ export class DualAuthModeHandler {
       return DualAuthModeHandler.AWS_SSO_TOKEN_ENDPOINT.replace('{region}', effectiveRegion);
     }
 
-    // Kiro Desktop mode
-    return DualAuthModeHandler.KIRO_DESKTOP_TOKEN_ENDPOINT.replace('{region}', effectiveRegion);
+    // Kiro Desktop/social mode
+    return DualAuthModeHandler.KIRO_DESKTOP_REFRESH_ENDPOINT.replace('{region}', effectiveRegion);
   }
 
   /**

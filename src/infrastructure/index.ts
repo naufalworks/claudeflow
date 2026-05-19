@@ -21,14 +21,14 @@ export async function initializeInfrastructure(config: {
   qdrant: QdrantConfig;
   redis: RedisConfig;
   voyage: VoyageConfig;
-  anthropic: AnthropicConfig;
+  anthropic?: AnthropicConfig;
 }): Promise<InfrastructureClients> {
   console.log('🚀 Initializing infrastructure...');
 
   const qdrant = new QdrantClientWrapper(config.qdrant);
   const redis = new RedisClientWrapper(config.redis);
   const voyage = new VoyageClient(config.voyage);
-  const anthropic = new AnthropicClientWrapper(config.anthropic);
+  const anthropic = new AnthropicClientWrapper(config.anthropic || { apiKey: 'not-configured' });
   const keychain = new KeychainStore();
 
   // Connect to services

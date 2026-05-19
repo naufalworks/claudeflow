@@ -21,6 +21,7 @@ import { AnthropicClient } from '../clients/AnthropicClient.js';
 import { ProxyClient } from '../clients/ProxyClient.js';
 import { OAuthClient } from '../clients/OAuthClient.js';
 import { KiroAPIClient } from '../clients/KiroAPIClient.js';
+import axios from 'axios';
 import { ResponseFormatValidator } from '../clients/ResponseFormatValidator.js';
 import { KeychainStore } from '../auth/KeychainStore.js';
 import { CircuitBreaker } from './circuit-breaker.js';
@@ -44,6 +45,7 @@ import { getCachedToken, cacheToken, invalidateCache } from './provider-optimiza
  */
 export type PoolAccount = Account & {
   quota: AccountQuota;
+  kiroCreditQuota?: KiroCreditQuota;
   performance: AccountPerformance;
   costEfficiency: number; // 0-1, where 1 is most efficient (free)
 };
@@ -57,6 +59,15 @@ export interface AccountQuota {
   tokensPerDay: number;
   tokensPerDayUsed: number;
   resetTime: number; // Unix timestamp
+}
+
+export interface KiroCreditQuota {
+  limit: number;
+  remaining: number;
+  used: number;
+  resetTime?: number;
+  source: 'headers' | 'codewhisperer';
+  updatedAt: number;
 }
 
 /**
@@ -253,8 +264,45 @@ export class AccountPoolManager {
    *
    * @param account - Account to add
    */
-  addAccount(account: PoolAccount): void {
-    this.accounts.set(account.id, account);
+  addAccount(account: PoolAccount | Account): void {
+    const rawAccount = account as any;
+    const isKiroProvider = rawAccount.provider === 'kiro' || rawAccount.provider === 'kiro-oauth';
+    const poolAccount: PoolAccount = {
+      ...rawAccount,
+      quota: rawAccount.quota ?? {
+        requestsPerMinute: isKiroProvider ? 1000 : 50,
+        requestsPerMinuteUsed: 0,
+        tokensPerDay: isKiroProvider ? 1000000 : 100000,
+        tokensPerDayUsed: 0,
+        resetTime: Date.now() + 24 * 60 * 60 * 1000,
+      },
+      performance: rawAccount.performance ?? {
+        averageLatency: 0,
+        successRate: 1.0,
+        lastUsed: 0,
+      },
+      costEfficiency: rawAccount.costEfficiency ?? (isKiroProvider ? 1.0 : 0.7),
+    };
+
+    if (poolAccount.provider === 'kiro-oauth') {
+      if (!this.circuitBreakers.has(poolAccount.id)) {
+        this.circuitBreakers.set(poolAccount.id, new CircuitBreaker(poolAccount.id));
+      }
+      if (!this.rateLimiters.has(poolAccount.id)) {
+        this.rateLimiters.set(poolAccount.id, new RateLimiter(poolAccount.id));
+      }
+      if (!this.quotaTrackers.has(poolAccount.id)) {
+        this.quotaTrackers.set(poolAccount.id, new QuotaTracker(poolAccount.id));
+      }
+      if (!this.healthMonitors.has(poolAccount.id)) {
+        this.healthMonitors.set(
+          poolAccount.id,
+          new HealthMonitor(poolAccount.id, this.kiroApiClient, this.createTokenProvider())
+        );
+      }
+    }
+
+    this.accounts.set(poolAccount.id, poolAccount);
   }
 
   /**
@@ -292,6 +340,7 @@ export class AccountPoolManager {
 
     // Load quota information from Redis for all accounts
     await this.loadQuotaFromRedis();
+    await this.loadKiroCreditQuotaFromRedis();
 
     // Get routing strategy from config
     const strategy = this.config.routing?.strategy || 'weighted-score';
@@ -353,6 +402,10 @@ export class AccountPoolManager {
     availableAccounts = availableAccounts.filter((account) => {
       // For kiro-oauth accounts, check quota tracker
       if (account.provider === 'kiro-oauth') {
+        if (this.getKiroCreditQuotaScore(account) <= 0) {
+          return false;
+        }
+
         const quotaTracker = this.quotaTrackers.get(account.id);
         if (quotaTracker && quotaTracker.isNearLimit()) {
           return false; // Near quota limit, skip for preemptive switching
@@ -567,6 +620,10 @@ export class AccountPoolManager {
     // Stage 4: Filter by quota status
     availableAccounts = availableAccounts.filter((account) => {
       if (account.provider === 'kiro-oauth') {
+        if (this.getKiroCreditQuotaScore(account) <= 0) {
+          return false;
+        }
+
         const quotaTracker = this.quotaTrackers.get(account.id);
         if (quotaTracker && quotaTracker.isNearLimit()) {
           return false;
@@ -663,6 +720,8 @@ export class AccountPoolManager {
                 },
                 retries: 3,
               });
+              await this.updateKiroCreditQuotaFromHeaders(account.id, (response as any).__headers);
+              delete (response as any).__headers;
 
               // Success - update metrics and return
               const quotaTracker = this.quotaTrackers.get(account.id);
@@ -769,7 +828,10 @@ export class AccountPoolManager {
    */
   private calculateAccountScore(account: PoolAccount): number {
     // Factor 1: Quota availability (40% weight)
-    const quotaScore = this.calculateQuotaScore(account.quota);
+    const quotaScore = Math.min(
+      this.calculateQuotaScore(account.quota),
+      this.getKiroCreditQuotaScore(account)
+    );
 
     // Factor 2: Performance (30% weight)
     const performanceScore = this.calculatePerformanceScore(account.performance);
@@ -813,6 +875,30 @@ export class AccountPoolManager {
   }
 
   /**
+   * Calculate live Kiro credit availability score when upstream quota is known.
+   */
+  private getKiroCreditQuotaScore(account: PoolAccount): number {
+    if (account.provider !== 'kiro-oauth') {
+      return 1;
+    }
+
+    const quota = account.kiroCreditQuota;
+    if (!quota) {
+      return 1;
+    }
+
+    if (quota.resetTime && quota.resetTime <= Date.now()) {
+      return 1;
+    }
+
+    if (quota.limit <= 0 || quota.remaining <= 0) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(1, quota.remaining / quota.limit));
+  }
+
+  /**
    * Calculate performance score
    *
    * @param performance - Account performance metrics
@@ -837,14 +923,20 @@ export class AccountPoolManager {
    * @returns Reason string
    */
   private getSelectionReason(account: PoolAccount): string {
-    if (account.provider === 'kiro') {
+    if (account.provider === 'kiro' || account.provider === 'kiro-oauth') {
+      if (this.getKiroCreditQuotaScore(account) <= 0.1) {
+        return 'Low Kiro credit availability';
+      }
       return 'Kiro account (free, high priority)';
     }
 
     const quotaScore = this.calculateQuotaScore(account.quota);
+    const creditScore = this.getKiroCreditQuotaScore(account);
     const performanceScore = this.calculatePerformanceScore(account.performance);
 
-    if (quotaScore > 0.8 && performanceScore > 0.8) {
+    if (creditScore <= 0.1) {
+      return 'Low Kiro credit availability';
+    } else if (quotaScore > 0.8 && performanceScore > 0.8) {
       return 'High quota availability and excellent performance';
     } else if (quotaScore > 0.8) {
       return 'High quota availability';
@@ -885,7 +977,10 @@ export class AccountPoolManager {
     // Start new refresh with automatic cleanup
     const refreshPromise = (async () => {
       try {
-        await this.authManager.refreshSession(account);
+        const result = await this.authManager.refreshSession(account);
+        if (!result.success) {
+          throw new AuthenticationError(accountId, result.error || 'Token refresh failed');
+        }
       } catch (error) {
         // Check if error is unrecoverable
         const unrecoverableResult = isUnrecoverableError(error);
@@ -972,7 +1067,10 @@ export class AccountPoolManager {
     // Run refresh with deduplication
     try {
       await this.tokenRefreshDeduplicator.runWithLock(accountId, async () => {
-        await this.authManager.refreshSession(account);
+        const result = await this.authManager.refreshSession(account);
+        if (!result.success) {
+          throw new AuthenticationError(accountId, result.error || 'Token refresh failed');
+        }
       });
       // Refresh completed, re-fetch credentials
       const refreshedCredentials = await this.keychainStore.retrieve(accountId);
@@ -1056,6 +1154,379 @@ export class AccountPoolManager {
    * @param latency - Request latency in milliseconds
    * @param success - Whether request was successful
    */
+  async updateKiroCreditQuotaFromHeaders(accountId: string, headers?: Record<string, string>): Promise<void> {
+    const account = this.accounts.get(accountId);
+    if (!account || !headers) return;
+
+    const normalized = Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value)])
+    );
+    const readNumber = (names: string[]): number | undefined => {
+      for (const name of names) {
+        const raw = normalized[name.toLowerCase()];
+        if (raw === undefined) continue;
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return undefined;
+    };
+
+    const limit = readNumber([
+      'x-ratelimit-limit',
+      'x-amzn-ratelimit-limit',
+      'x-kiro-credit-limit',
+      'x-codewhisperer-credit-limit',
+      'x-amzn-codewhisperer-credit-limit',
+    ]);
+    const remaining = readNumber([
+      'x-ratelimit-remaining',
+      'x-amzn-ratelimit-remaining',
+      'x-kiro-credit-remaining',
+      'x-codewhisperer-credit-remaining',
+      'x-amzn-codewhisperer-credit-remaining',
+    ]);
+    const resetSeconds = readNumber([
+      'x-ratelimit-reset',
+      'x-amzn-ratelimit-reset',
+      'x-kiro-credit-reset',
+      'x-codewhisperer-credit-reset',
+      'x-amzn-codewhisperer-credit-reset',
+    ]);
+
+    const quotaHeaderNames = Object.keys(normalized).filter((key) =>
+      /(quota|limit|remaining|reset|credit|rate)/i.test(key)
+    );
+    if (quotaHeaderNames.length > 0) {
+      console.log(`[KiroQuota] observed quota-like headers for ${accountId}: ${quotaHeaderNames.join(', ')}`);
+    }
+
+    if (limit === undefined || remaining === undefined || limit <= 0 || remaining < 0 || remaining > limit) {
+      return;
+    }
+
+    const resetTime = resetSeconds
+      ? resetSeconds > 10_000_000_000
+        ? resetSeconds
+        : resetSeconds * 1000
+      : undefined;
+    const kiroCreditQuota: KiroCreditQuota = {
+      limit,
+      remaining,
+      used: Math.max(0, limit - remaining),
+      resetTime,
+      source: 'headers',
+      updatedAt: Date.now(),
+    };
+
+    await this.storeKiroCreditQuota(accountId, kiroCreditQuota);
+  }
+
+  async loadKiroCreditQuotaFromRedis(): Promise<void> {
+    await Promise.all(Array.from(this.accounts.values()).map(async (account) => {
+      if (account.provider !== 'kiro-oauth') return;
+      const data = await this.redisClient.getClient().get(`kiro:quota:${account.id}`);
+      if (!data) return;
+      try {
+        account.kiroCreditQuota = JSON.parse(data) as KiroCreditQuota;
+      } catch {
+        // ignore malformed cache
+      }
+    }));
+  }
+
+  private readNestedNumber(data: any, paths: string[][]): number | undefined {
+    for (const path of paths) {
+      let value = data;
+      for (const key of path) {
+        value = value?.[key];
+      }
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }
+
+  private readNestedTime(data: any, paths: string[][]): number | undefined {
+    for (const path of paths) {
+      let value = data;
+      for (const key of path) {
+        value = value?.[key];
+      }
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 10_000_000_000 ? value : value * 1000;
+      }
+      const parsedNumber = Number(value);
+      if (Number.isFinite(parsedNumber)) {
+        return parsedNumber > 10_000_000_000 ? parsedNumber : parsedNumber * 1000;
+      }
+      const parsedDate = Date.parse(String(value));
+      if (Number.isFinite(parsedDate)) return parsedDate;
+    }
+    return undefined;
+  }
+
+  private normalizeKiroCreditQuota(data: any): KiroCreditQuota | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+
+    const limit = this.readNestedNumber(data, [
+      ['credits', 'total'],
+      ['credits', 'limit'],
+      ['freeTrialInfo', 'totalCredits'],
+      ['freeTrialInfo', 'creditLimit'],
+      ['freeTrialInfo', 'limit'],
+      ['freeTrialInfo', 'usageLimitWithPrecision'],
+      ['subscriptionInfo', 'creditLimit'],
+      ['usageLimit'],
+      ['usageLimitWithPrecision'],
+      ['limit'],
+      ['usage', 'limit'],
+    ]);
+    const remaining = this.readNestedNumber(data, [
+      ['credits', 'remaining'],
+      ['freeTrialInfo', 'remainingCredits'],
+      ['freeTrialInfo', 'creditsRemaining'],
+      ['subscriptionInfo', 'remainingCredits'],
+      ['remaining'],
+      ['usage', 'remaining'],
+    ]);
+    const used = this.readNestedNumber(data, [
+      ['credits', 'used'],
+      ['freeTrialInfo', 'usedCredits'],
+      ['freeTrialInfo', 'creditsUsed'],
+      ['subscriptionInfo', 'usedCredits'],
+      ['currentUsage'],
+      ['currentUsageWithPrecision'],
+      ['used'],
+      ['usage', 'used'],
+    ]);
+    const resetTime = this.readNestedTime(data, [
+      ['credits', 'resetDate'],
+      ['credits', 'resetTime'],
+      ['nextReset'],
+      ['nextDateReset'],
+      ['resetTime'],
+      ['nextResetTime'],
+      ['resetDate'],
+      ['usage', 'nextReset'],
+      ['usage', 'resetTime'],
+    ]);
+
+    let normalizedLimit = limit;
+    let normalizedRemaining = remaining;
+    let normalizedUsed = used;
+    let normalizedResetTime = resetTime;
+
+    if ((!normalizedLimit || normalizedLimit <= 0) && Array.isArray(data.usageBreakdownList)) {
+      for (const item of data.usageBreakdownList) {
+        normalizedLimit = this.readNestedNumber(item, [
+          ['usageLimit'],
+          ['usageLimitWithPrecision'],
+          ['limit'],
+          ['total'],
+          ['totalCredits'],
+          ['creditLimit'],
+          ['freeTrialInfo', 'usageLimitWithPrecision'],
+          ['freeTrialInfo', 'creditLimit'],
+          ['freeTrialInfo', 'totalCredits'],
+          ['credits', 'total'],
+          ['usage', 'limit'],
+        ]);
+        normalizedUsed = this.readNestedNumber(item, [
+          ['currentUsage'],
+          ['currentUsageWithPrecision'],
+          ['used'],
+          ['usedCredits'],
+          ['creditsUsed'],
+          ['freeTrialInfo', 'currentUsageWithPrecision'],
+          ['freeTrialInfo', 'usedCredits'],
+          ['freeTrialInfo', 'creditsUsed'],
+          ['usage'],
+          ['credits', 'used'],
+          ['usage', 'used'],
+        ]);
+        normalizedRemaining = this.readNestedNumber(item, [
+          ['remaining'],
+          ['remainingCredits'],
+          ['creditsRemaining'],
+          ['freeTrialInfo', 'remainingCredits'],
+          ['freeTrialInfo', 'creditsRemaining'],
+          ['credits', 'remaining'],
+          ['usage', 'remaining'],
+        ]);
+        normalizedResetTime = normalizedResetTime ?? this.readNestedTime(item, [
+          ['resetDate'],
+          ['resetTime'],
+          ['nextDateReset'],
+          ['freeTrialInfo', 'freeTrialExpiry'],
+        ]);
+        if (normalizedLimit && normalizedLimit > 0) break;
+      }
+    }
+
+    if (normalizedLimit !== undefined && normalizedRemaining === undefined && normalizedUsed !== undefined) {
+      normalizedRemaining = Math.max(0, normalizedLimit - normalizedUsed);
+    }
+    if (normalizedLimit !== undefined && normalizedUsed === undefined && normalizedRemaining !== undefined) {
+      normalizedUsed = Math.max(0, normalizedLimit - normalizedRemaining);
+    }
+
+    if (
+      normalizedLimit === undefined ||
+      normalizedRemaining === undefined ||
+      normalizedLimit <= 0 ||
+      normalizedRemaining < 0 ||
+      normalizedRemaining > normalizedLimit
+    ) {
+      return undefined;
+    }
+
+    return {
+      limit: normalizedLimit,
+      remaining: normalizedRemaining,
+      used: normalizedUsed ?? Math.max(0, normalizedLimit - normalizedRemaining),
+      resetTime: normalizedResetTime,
+      source: 'codewhisperer',
+      updatedAt: Date.now(),
+    };
+  }
+
+  private async storeKiroCreditQuota(accountId: string, quota: KiroCreditQuota): Promise<void> {
+    const account = this.accounts.get(accountId);
+    if (account) account.kiroCreditQuota = quota;
+
+    const ttl = quota.resetTime
+      ? Math.max(300, Math.min(3600, Math.floor((quota.resetTime - Date.now()) / 1000)))
+      : 900;
+
+    await this.redisClient.getClient().setex(
+      `kiro:quota:${accountId}`,
+      ttl,
+      JSON.stringify(quota)
+    );
+  }
+
+  async refreshKiroCreditQuota(accountId: string): Promise<KiroCreditQuota | undefined> {
+    const account = this.accounts.get(accountId);
+    if (!account || account.provider !== 'kiro-oauth') return undefined;
+
+    // Quota lookup must not force OAuth token rotation. Manual dashboard refresh
+    // was causing AWS/Kiro refresh-token 400s even when the access token was still
+    // usable. Use the current stored access token; request/selection paths handle
+    // actual token refresh when expiry requires it.
+    const credentials = await this.keychainStore.retrieve(account.id);
+    if (!credentials?.accessToken) {
+      console.warn(`[KiroQuota] skipped credits refresh for ${account.id}: no stored access token`);
+      return undefined;
+    }
+
+    const region = (account as KiroOAuthAccount).region || 'us-east-1';
+    const profileArn = (account as KiroOAuthAccount).profileArn;
+    const getUsageParams = new URLSearchParams({
+      isEmailRequired: 'true',
+      origin: 'AI_EDITOR',
+      resourceType: 'AGENTIC_REQUEST',
+    });
+    const qUsageParams = new URLSearchParams({
+      origin: 'AI_EDITOR',
+      profileArn,
+      resourceType: 'AGENTIC_REQUEST',
+    });
+    const endpoints: Array<{
+      name: string;
+      run: () => Promise<any>;
+    }> = [
+      {
+        name: 'codewhisperer-get',
+        run: () => axios.get(
+          `https://codewhisperer.${region}.amazonaws.com/getUsageLimits?${getUsageParams.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${credentials.accessToken}`,
+              Accept: 'application/json',
+              'User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
+              'X-Amz-User-Agent': 'aws-sdk-js/1.0.0 KiroIDE',
+            },
+            timeout: 15000,
+            maxRedirects: 0,
+          }
+        ),
+      },
+      {
+        name: 'codewhisperer-post',
+        run: () => axios.post(
+          `https://codewhisperer.${region}.amazonaws.com`,
+          {
+            origin: 'AI_EDITOR',
+            profileArn,
+            resourceType: 'AGENTIC_REQUEST',
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${credentials.accessToken}`,
+              'Content-Type': 'application/x-amz-json-1.0',
+              'X-Amz-Target': 'AmazonCodeWhispererService.GetUsageLimits',
+              Accept: 'application/json',
+            },
+            timeout: 15000,
+            maxRedirects: 0,
+          }
+        ),
+      },
+      {
+        name: 'q-get',
+        run: () => axios.get(
+          `https://q.${region}.amazonaws.com/getUsageLimits?${qUsageParams.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${credentials.accessToken}`,
+              Accept: 'application/json',
+            },
+            timeout: 15000,
+            maxRedirects: 0,
+          }
+        ),
+      },
+    ];
+
+    let lastError: any;
+    for (const endpoint of endpoints) {
+      try {
+        const response = await endpoint.run();
+        const quota = this.normalizeKiroCreditQuota(response.data);
+        if (quota) {
+          await this.storeKiroCreditQuota(accountId, quota);
+          console.log(`[KiroQuota] refreshed credits for ${accountId} from ${endpoint.name}: ${quota.remaining}/${quota.limit}`);
+          return quota;
+        }
+        console.warn(`[KiroQuota] quota response did not contain recognized credit fields for ${accountId}`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      const status = axios.isAxiosError(lastError) ? lastError.response?.status : undefined;
+      const responseData = axios.isAxiosError(lastError) ? JSON.stringify(lastError.response?.data || {}) : '';
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      console.warn(`[KiroQuota] failed to refresh credits for ${accountId}: ${status || 'no-status'} ${LogSanitizer.sanitize(message)} ${LogSanitizer.sanitize(responseData)}`.trim());
+    }
+    return undefined;
+  }
+
+  async refreshStaleKiroCreditQuotas(maxAgeMs: number = 15 * 60 * 1000): Promise<void> {
+    await Promise.all(Array.from(this.accounts.values()).map(async (account) => {
+      if (account.provider !== 'kiro-oauth') return;
+      if (account.kiroCreditQuota && Date.now() - account.kiroCreditQuota.updatedAt < maxAgeMs) return;
+      try {
+        await this.refreshKiroCreditQuota(account.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[KiroQuota] skipped quota refresh for ${account.id}: ${LogSanitizer.sanitize(message)}`);
+      }
+    }));
+  }
+
   async updatePerformance(accountId: string, latency: number, success: boolean): Promise<void> {
     const account = this.accounts.get(accountId);
     if (!account) {
@@ -1184,6 +1655,47 @@ export class AccountPoolManager {
    */
   getAccount(accountId: string): PoolAccount | undefined {
     return this.accounts.get(accountId);
+  }
+
+  /**
+   * Remove an account from the pool
+   *
+   * @param accountId - ID of account to remove
+   * @returns true if account was removed, false if not found
+   */
+  removeAccount(accountId: string): boolean {
+    const account = this.accounts.get(accountId);
+
+    if (!account) {
+      return false;
+    }
+
+    // Remove from accounts map
+    this.accounts.delete(accountId);
+
+    // Clean up associated resources
+    const circuitBreaker = this.circuitBreakers.get(accountId);
+    if (circuitBreaker) {
+      this.circuitBreakers.delete(accountId);
+    }
+
+    const rateLimiter = this.rateLimiters.get(accountId);
+    if (rateLimiter) {
+      this.rateLimiters.delete(accountId);
+    }
+
+    const healthMonitor = this.healthMonitors.get(accountId);
+    if (healthMonitor) {
+      healthMonitor.stopHealthChecks();
+      this.healthMonitors.delete(accountId);
+    }
+
+    const quotaTracker = this.quotaTrackers.get(accountId);
+    if (quotaTracker) {
+      this.quotaTrackers.delete(accountId);
+    }
+
+    return true;
   }
 
   /**

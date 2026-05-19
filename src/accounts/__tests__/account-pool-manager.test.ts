@@ -12,6 +12,12 @@ import { KeychainStore } from '../../auth/KeychainStore';
 // Mock RedisClientWrapper and KeychainStore
 jest.mock('../../infrastructure/redis');
 jest.mock('../../auth/KeychainStore');
+jest.mock('../../auth/AuthManager', () => ({
+  AuthManager: jest.fn().mockImplementation(() => ({
+    needsRefresh: jest.fn().mockResolvedValue(false),
+    refreshSession: jest.fn().mockResolvedValue({ success: true }),
+  })),
+}));
 
 describe('AccountPoolManager', () => {
   let manager: AccountPoolManager;
@@ -214,6 +220,110 @@ describe('AccountPoolManager', () => {
       await expect(manager.updateQuota('nonexistent', 500)).rejects.toThrow(
         'Account nonexistent not found'
       );
+    });
+  });
+
+  describe('Kiro Credit Quota', () => {
+    it('normalizes CodeWhisperer GetUsageLimits precision fields', () => {
+      const reset = '2026-05-20T00:00:00.000Z';
+      const quota = (manager as any).normalizeKiroCreditQuota({
+        nextDateReset: reset,
+        usageBreakdownList: [
+          {
+            resourceType: 'AGENTIC_REQUEST',
+            currentUsageWithPrecision: 25,
+            usageLimitWithPrecision: 100,
+          },
+        ],
+      });
+
+      expect(quota).toEqual({
+        limit: 100,
+        remaining: 75,
+        used: 25,
+        resetTime: Date.parse(reset),
+        source: 'codewhisperer',
+        updatedAt: expect.any(Number),
+      });
+    });
+
+    it('skips Kiro accounts when live credit quota is exhausted', async () => {
+      const baseQuota = {
+        requestsPerMinute: 1000,
+        requestsPerMinuteUsed: 0,
+        tokensPerDay: 1000000,
+        tokensPerDayUsed: 0,
+        resetTime: Date.now() + 24 * 60 * 60 * 1000,
+      };
+      const performance = {
+        averageLatency: 0,
+        successRate: 1,
+        lastUsed: 0,
+      };
+
+      manager.addAccount({
+        id: 'kiro-deadbeef',
+        provider: 'kiro-oauth',
+        region: 'us-east-1',
+        profileArn: 'arn:aws:codewhisperer:us-east-1:123456789012:profile/test-profile',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        quota: { ...baseQuota },
+        kiroCreditQuota: {
+          limit: 100,
+          remaining: 0,
+          used: 100,
+          source: 'codewhisperer',
+          updatedAt: Date.now(),
+        },
+        performance: { ...performance },
+        costEfficiency: 1,
+      } as any);
+      manager.addAccount({
+        id: 'paid1',
+        provider: 'anthropic',
+        apiKey: 'key1',
+        quota: { ...baseQuota },
+        performance: { ...performance },
+        costEfficiency: 0.7,
+      } as any);
+
+      mockRedis.get.mockResolvedValue(null);
+
+      const result = await manager.selectAccount();
+
+      expect(result.account.id).toBe('paid1');
+    });
+
+    it('loads cached Kiro credit quota before account selection', async () => {
+      manager.addAccount({
+        id: 'kiro-ca11ed',
+        provider: 'kiro-oauth',
+        region: 'us-east-1',
+        profileArn: 'arn:aws:codewhisperer:us-east-1:123456789012:profile/test-profile',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      } as any);
+      manager.addAccount({
+        id: 'paid1',
+        provider: 'anthropic',
+        apiKey: 'key1',
+      } as any);
+
+      mockRedis.get.mockImplementation(async (key: string) => {
+        if (key === 'kiro:quota:kiro-ca11ed') {
+          return JSON.stringify({
+            limit: 100,
+            remaining: 0,
+            used: 100,
+            source: 'codewhisperer',
+            updatedAt: Date.now(),
+          });
+        }
+        return null;
+      });
+
+      const result = await manager.selectAccount();
+
+      expect(result.account.id).toBe('paid1');
     });
   });
 

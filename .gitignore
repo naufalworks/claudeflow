@@ -39,6 +39,10 @@ config.json
 !config.example.json
 
 # Temporary documentation (prevent bloat)
+docs/archive/
+E2E_*.md
+PHASE_*.md
+MONOREPO_SETUP.md
 *_COMPLETE.md
 *_SUMMARY.md
 *_FIXED.md

@@ -9,7 +9,7 @@
 
 /** Configuration for the Real-Time Update Service */
 export interface RealTimeConfig {
-  /** Server port (default: 8080) */
+  /** Server port (default: 3130) */
   port: number;
   /** Authentication token (optional - if not set, no auth required) */
   authToken?: string;
@@ -31,7 +31,7 @@ export interface RealTimeConfig {
 
 /** Default configuration values */
 export const DEFAULT_REALTIME_CONFIG: RealTimeConfig = {
-  port: 8080,
+  port: 3130,
   batchInterval: 100,
   maxBatchSize: 10,
   maxPayload: 10240,

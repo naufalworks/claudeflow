@@ -1,219 +1,78 @@
-# ClaudeFlow MITM Proxy - Quick Start Guide
+# Quick Start
 
-## 🎯 Goal
+This guide starts the local API and web dashboard.
 
-Use Kiro CLI/IDE with 1000+ accounts through ClaudeFlow's smart routing, never login again.
-
-## 🚀 Quick Start (5 Minutes)
-
-### Step 1: Install MITM Proxy (30 seconds)
+## 1. Install Dependencies
 
 ```bash
-sudo claudeflow mitm install
+npm install
+cd web && npm install && cd ..
 ```
 
-**What happens:**
-- ✅ Generates CA certificate
-- ✅ Installs to system trust store
-- ✅ Modifies `/etc/hosts`
-- ✅ Flushes DNS cache
-
-### Step 2: Add Kiro Accounts (2-3 minutes)
+## 2. Configure Environment
 
 ```bash
-# Option A: Add accounts one by one (interactive)
-claudeflow login
-
-# Option B: Add 1000 accounts (automated)
-for i in {1..1000}; do
-  claudeflow login --method builder-id --region us-east-1
-done
+cp .env.example .env
 ```
 
-**What happens:**
-- ✅ Device Code Flow authentication
-- ✅ Tokens stored in OS Keychain
-- ✅ Automatic token refresh enabled
+Edit `.env` with the services and credentials you need:
 
-### Step 3: Start MITM Proxy (10 seconds)
+- `CLAUDEFLOW_API_KEYS` for dashboard/API authentication.
+- `REDIS_URL` for routing and quota state.
+- `QDRANT_URL` for semantic cache storage.
+- `VOYAGE_API_KEY` if semantic deduplication is enabled.
+- Anthropic, proxy, or Kiro account settings.
+
+## 3. Start Development Servers
 
 ```bash
-# Option A: Start MITM proxy standalone
-sudo claudeflow mitm start
-
-# Option B: Start daemon with MITM proxy
-sudo claudeflow daemon start --mitm
+npm run dev
 ```
 
-**What happens:**
-- ✅ HTTPS server starts on port 443
-- ✅ Intercepts Kiro domains
-- ✅ Account pool manager initialized
-- ✅ Smart routing enabled
+Default endpoints:
 
-### Step 4: Use Kiro CLI/IDE (immediately)
+- API: `http://localhost:20129`
+- Web dashboard: `http://localhost:3001`
+
+## 4. Verify API Routing
 
 ```bash
-# Just use Kiro CLI normally
-kiro chat "Hello, Claude!"
-kiro chat "Write a Python script"
-kiro chat "Explain this code"
-
-# Or use Kiro IDE - it just works!
+curl http://localhost:20129/health
 ```
 
-**What happens:**
-- ✅ Requests intercepted automatically
-- ✅ Smart account selection (quota-aware)
-- ✅ Automatic token refresh
-- ✅ Native Anthropic format (100% features)
+For Anthropic-compatible clients, set the base URL to `http://localhost:20129`.
 
-## ✅ Done!
+## 5. Optional Kiro OAuth Setup
 
-You now have:
-- ✅ 1000+ Kiro accounts
-- ✅ Smart routing (quota-aware, priority-based)
-- ✅ Automatic token refresh
-- ✅ Native Anthropic format (100% Claude features)
-- ✅ Never need to login again
-
-## 📊 Check Status
+Use the CLI login flow for Kiro accounts:
 
 ```bash
-# Check MITM proxy status
-claudeflow mitm status
-
-# Check accounts
+claudeflow login --method builder-id --region us-east-1
 claudeflow account list
+```
 
-# Check daemon
+ClaudeFlow stores tokens securely and refreshes access tokens before expiry.
+
+## 6. Optional MITM Mode
+
+MITM mode is only needed when you want local Kiro CLI/IDE traffic intercepted transparently.
+
+```bash
+sudo claudeflow mitm install
+sudo claudeflow daemon start --mitm
+```
+
+MITM mode modifies local certificate trust and host routing. Use it only on machines you control.
+
+## Useful Commands
+
+```bash
+npm run build:api
+npm run build:web
+npm test
 claudeflow daemon status
-
-# View logs
-claudeflow logs
+claudeflow logs -f
+claudeflow account list
 ```
 
-## 🔄 Enable Autostart (Optional)
-
-```bash
-# Start ClaudeFlow automatically on system boot
-claudeflow autostart enable
-
-# Now you never need to start it manually
-```
-
-## 🛑 Stop/Uninstall
-
-```bash
-# Stop MITM proxy
-sudo claudeflow mitm stop
-
-# Uninstall MITM proxy (restore system)
-sudo claudeflow mitm uninstall
-```
-
-## 🎁 What You Get vs 9router
-
-| Feature | 9router | ClaudeFlow |
-|---------|---------|------------|
-| **Response Format** | ❌ OpenAI (40-60% features lost) | ✅ Native Anthropic (100%) |
-| **Thinking Blocks** | ❌ Lost | ✅ Preserved |
-| **Prompt Caching** | ❌ Lost | ✅ Preserved |
-| **Extended Context** | ❌ Limited | ✅ 200K tokens |
-| **Account Routing** | ❌ Basic round-robin | ✅ Smart (quota-aware) |
-| **Token Storage** | ❌ File-based (plain text) | ✅ OS Keychain (encrypted) |
-| **Token Refresh** | ❌ Unknown | ✅ Automatic (60s interval) |
-| **Health Monitoring** | ❌ None | ✅ Circuit breaker + health checks |
-
-## 💡 Use Cases
-
-### Use Case 1: Heavy Kiro CLI Usage
-```bash
-# Setup once
-sudo claudeflow mitm install
-for i in {1..1000}; do claudeflow login; done
-sudo claudeflow daemon start --mitm
-claudeflow autostart enable
-
-# Use forever
-kiro chat "..." # Never rate limited
-kiro chat "..." # Never need to login
-kiro chat "..." # Always fast
-```
-
-### Use Case 2: Kiro IDE Development
-```bash
-# Setup once
-sudo claudeflow mitm install
-claudeflow login # Add multiple accounts
-sudo claudeflow daemon start --mitm
-
-# Code forever
-# Kiro IDE autocomplete - always works
-# Kiro IDE chat - never rate limited
-# Kiro IDE explain - always fast
-```
-
-### Use Case 3: Team Sharing
-```bash
-# Setup once on shared server
-sudo claudeflow mitm install
-for i in {1..1000}; do claudeflow login; done
-sudo claudeflow daemon start --mitm
-
-# Entire team uses same ClaudeFlow instance
-# No individual rate limits
-# Centralized account management
-# Smart routing across all accounts
-```
-
-## 🔧 Troubleshooting
-
-### "OpenSSL not found"
-```bash
-brew install openssl  # macOS
-sudo apt-get install openssl  # Linux
-```
-
-### "Port 443 requires root/admin privileges"
-```bash
-sudo claudeflow mitm start  # Use sudo
-```
-
-### "Kiro CLI still using original API"
-```bash
-# Flush DNS cache
-sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder  # macOS
-sudo systemd-resolve --flush-caches  # Linux
-
-# Restart Kiro CLI
-```
-
-## 📚 Full Documentation
-
-- **MITM_PROXY_GUIDE.md** - Complete implementation guide
-- **MITM_IMPLEMENTATION_COMPLETE.md** - Technical details
-- **ARCHITECTURE_MITM_VS_DIRECT.md** - Architecture comparison
-- **AUTOMATIC_TOKEN_REFRESH.md** - Token refresh details
-- **DEVICE_CODE_FLOW_COMPLETE.md** - Authentication details
-
-## 🎉 Summary
-
-**Before ClaudeFlow:**
-- ❌ Login every hour
-- ❌ Rate limited constantly
-- ❌ Single account
-- ❌ OpenAI format (40-60% features lost)
-
-**After ClaudeFlow:**
-- ✅ Never login again
-- ✅ Never rate limited
-- ✅ 1000+ accounts with smart routing
-- ✅ Native Anthropic format (100% features)
-
----
-
-**Date:** 2026-05-05  
-**Status:** ✅ PRODUCTION READY  
-**Time to Setup:** 5 minutes  
-**Time Saved:** Forever
+See [docs/README.md](docs/README.md) for the full documentation index.

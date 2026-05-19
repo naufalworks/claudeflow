@@ -256,6 +256,7 @@ export class HealthMonitor {
         console.error(`Health check failed for ${this.accountId}:`, error);
       });
     }, this.config.checkInterval);
+    this.checkInterval.unref?.();
   }
 
   /**
